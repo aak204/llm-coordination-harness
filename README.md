@@ -1,4 +1,4 @@
-# coord_harness
+# llm-coordination-harness
 
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](./pyproject.toml)
 [![Stage](https://img.shields.io/badge/stage-clean%20%2B%20stress-darkgreen.svg)](./docs/CLAIM.md)
@@ -6,7 +6,7 @@
 [![Result](https://img.shields.io/badge/result-honest%20negative%20%2F%20methods-orange.svg)](./docs/TECHNICAL_REPORT_DRAFT.md)
 [![Status](https://img.shields.io/badge/release-freeze-lightgrey.svg)](./configs/RELEASE_FREEZE.json)
 
-`coord_harness` is a reproducible measurement rig for hidden coordination variables in multi-agent LLM systems under fixed billed-token budgets.
+`llm-coordination-harness` is a reproducible measurement rig for hidden coordination variables in multi-agent LLM systems under fixed billed-token budgets.
 
 This repository is intentionally positioned as:
 
