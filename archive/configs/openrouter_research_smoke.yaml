@@ -1,0 +1,42 @@
+run:
+  experiment_id: openrouter-research-smoke
+  framework_id: coord_harness_v1
+  stage: clean
+  mode: research_strict
+  description: Single real research-strict OpenRouter smoke request through the harness.
+  output_root: outputs
+  agent_count: 5
+  total_billed_token_budget: 1400
+  max_concurrency: 25
+  capture_model_catalog_snapshot: true
+
+benchmarks:
+  - family: craft_mini
+    stage: clean
+    split: smoke
+    task_limit: 1
+
+model_panel:
+  - alias: qwen35_plus_0215
+    provider: openrouter
+    model_id: qwen/qwen3.5-plus-02-15
+    panel_tier: sweep
+    temperature: 0.0
+    top_p: 1.0
+    max_completion_tokens: 48
+    allow_auto_routing: false
+    reasoning:
+      effort: none
+      exclude: true
+    routing:
+      only: [alibaba]
+      allow_fallbacks: false
+
+sweep:
+  benchmark_families: [craft_mini]
+  topology_presets: [star]
+  message_token_budgets: [32]
+  model_aliases: [qwen35_plus_0215]
+  model_tiers: []
+  baselines: [sa_star]
+  seeds: [7]

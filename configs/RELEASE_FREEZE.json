@@ -1,0 +1,15 @@
+{
+  "release_name": "phase1-clean-and-phase2-p0b",
+  "frozen_configs": [
+    {
+      "path": "configs/p0a_calibrated_full_live.yaml",
+      "sha256": "632819b8230849376fba65da1a7ffe896fc931931ae4e9b5147392fb5178f0a8",
+      "purpose": "Calibrated full clean live run"
+    },
+    {
+      "path": "configs/p0b_attacks_live.yaml",
+      "sha256": "fa7ae31a1be3b75d2242943abff5435bbc57cb0e965a5cf949c429621449f24f",
+      "purpose": "P0b attack gate live run"
+    }
+  ]
+}

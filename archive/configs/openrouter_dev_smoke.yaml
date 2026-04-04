@@ -1,0 +1,37 @@
+run:
+  experiment_id: openrouter-dev-smoke
+  framework_id: coord_harness_v1
+  stage: clean
+  mode: dev_convenience
+  description: Dev-convenience smoke config that permits OpenRouter auto routing.
+  output_root: outputs
+  agent_count: 5
+  total_billed_token_budget: 1400
+  capture_model_catalog_snapshot: true
+
+benchmarks:
+  - family: craft_mini
+    stage: clean
+    split: smoke
+    task_limit: 1
+
+model_panel:
+  - alias: auto-dev
+    provider: openrouter
+    model_id: openrouter/auto
+    panel_tier: dev
+    temperature: 0.0
+    top_p: 1.0
+    max_completion_tokens: 96
+    allow_auto_routing: true
+    routing:
+      allow_fallbacks: true
+
+sweep:
+  benchmark_families: [craft_mini]
+  topology_presets: [star]
+  message_token_budgets: [32]
+  model_aliases: [auto-dev]
+  model_tiers: []
+  baselines: [sa_star]
+  seeds: [7]

@@ -1,0 +1,62 @@
+run:
+  experiment_id: p0a-calibration-live
+  framework_id: coord_harness_v1
+  stage: clean
+  mode: research_strict
+  description: Calibration slice to test whether benchmark de-saturation creates regime variation on two live models.
+  output_root: outputs
+  agent_count: 5
+  total_billed_token_budget: 7500
+  capture_model_catalog_snapshot: true
+  regime_thresholds:
+    help_min_lift: 0.05
+    collapse_max_lift: -0.05
+
+benchmarks:
+  - family: craft_mini
+    stage: clean
+    split: calibration
+    task_limit: 4
+  - family: agentsnet_mini
+    stage: clean
+    split: calibration
+    task_limit: 4
+
+model_panel:
+  - alias: qwen35_plus_0215
+    provider: openrouter
+    model_id: qwen/qwen3.5-plus-02-15
+    panel_tier: sweep
+    temperature: 0.0
+    top_p: 1.0
+    max_completion_tokens: 48
+    allow_auto_routing: false
+    reasoning:
+      effort: none
+      exclude: true
+    routing:
+      only: [alibaba]
+      allow_fallbacks: false
+  - alias: minimax_m27
+    provider: openrouter
+    model_id: minimax/minimax-m2.7
+    panel_tier: referee
+    temperature: 0.0
+    top_p: 1.0
+    max_completion_tokens: 640
+    allow_auto_routing: false
+    reasoning:
+      enabled: true
+      exclude: false
+    routing:
+      only: [minimax]
+      allow_fallbacks: false
+
+sweep:
+  benchmark_families: [craft_mini, agentsnet_mini]
+  topology_presets: [star, balanced_tree]
+  message_token_budgets: [0, 32, 96]
+  model_aliases: [qwen35_plus_0215, minimax_m27]
+  model_tiers: []
+  baselines: [sa_star, vote_local, ma_ft]
+  seeds: [7]

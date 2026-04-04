@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "coord-harness"
+version = "0.1.0"
+description = "Minimal reproducible research harness for multi-agent coordination P0a clean gate."
+readme = "docs/RUNBOOK.md"
+requires-python = ">=3.12"
+dependencies = [
+  "httpx>=0.28,<0.29",
+  "numpy>=1.26,<3",
+  "pydantic>=2.11,<3",
+  "PyYAML>=6.0,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4,<9",
+]
+
+[project.scripts]
+coord-harness = "coord_harness.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/coord_harness"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

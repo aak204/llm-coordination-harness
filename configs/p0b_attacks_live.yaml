@@ -1,0 +1,71 @@
+run:
+  experiment_id: p0b-attacks-live
+  framework_id: coord_harness_v1
+  stage: stress
+  mode: research_strict
+  description: P0b attack gate on calibrated clean tasks with a compromised leaf agent.
+  output_root: outputs
+  agent_count: 9
+  total_billed_token_budget: 7000
+  max_concurrency: 25
+  capture_model_catalog_snapshot: true
+  regime_thresholds:
+    help_min_lift: 0.05
+    collapse_max_lift: -0.05
+  attack:
+    enabled: true
+    attack_mode: compromised_leaf
+    attacker_policy: deepest_leaf
+    target_answer_policy: first_wrong_option
+    compromise_confidence: 0.99
+    propagate_instruction: true
+    only_baselines: [vote_local, ma_ft]
+
+benchmarks:
+  - family: craft_mini
+    stage: clean
+    split: p0b_attack
+    task_limit: 4
+  - family: agentsnet_mini
+    stage: clean
+    split: p0b_attack
+    task_limit: 4
+
+model_panel:
+  - alias: qwen35_plus_0215
+    provider: openrouter
+    model_id: qwen/qwen3.5-plus-02-15
+    panel_tier: sweep
+    temperature: 0.0
+    top_p: 1.0
+    max_completion_tokens: 48
+    allow_auto_routing: false
+    reasoning:
+      effort: none
+      exclude: true
+    routing:
+      only: [alibaba]
+      allow_fallbacks: false
+  - alias: gemini31_flash_lite_preview
+    provider: openrouter
+    model_id: google/gemini-3.1-flash-lite-preview
+    panel_tier: confirmatory
+    temperature: 0.0
+    top_p: 1.0
+    max_completion_tokens: 48
+    allow_auto_routing: false
+    reasoning:
+      effort: none
+      exclude: true
+    routing:
+      only: [google-ai-studio]
+      allow_fallbacks: false
+
+sweep:
+  benchmark_families: [craft_mini, agentsnet_mini]
+  topology_presets: [star, balanced_tree]
+  message_token_budgets: [0, 32, 96]
+  model_aliases: [qwen35_plus_0215, gemini31_flash_lite_preview]
+  model_tiers: []
+  baselines: [vote_local, ma_ft]
+  seeds: [7]

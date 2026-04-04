@@ -1,0 +1,6 @@
+family: craft_mini
+stage: clean
+dataset_revision: local-mini-v3
+task_schema_version: mcq-partial-info-v1
+source_kind: repo_local_pack
+description: Repo-local CRAFT-mini clean calibration pack with leaf-critical asymmetric evidence for topology-control probes.

@@ -1,0 +1,6 @@
+family: agentsnet_mini
+stage: clean
+dataset_revision: local-mini-v5
+task_schema_version: mcq-partial-info-v1
+source_kind: repo_local_pack
+description: Repo-local AgentsNet-mini clean calibration pack with chain-sensitive distributed evidence and multi-hop coordination pressure.

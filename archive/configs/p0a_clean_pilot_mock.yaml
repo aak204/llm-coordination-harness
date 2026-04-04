@@ -1,0 +1,42 @@
+run:
+  experiment_id: p0a-clean-pilot-mock
+  framework_id: coord_harness_v1
+  stage: clean
+  mode: research_strict
+  description: Tiny local clean pilot across both benchmark families and all P0a topology and message-budget presets.
+  output_root: outputs
+  agent_count: 5
+  total_billed_token_budget: 3200
+  capture_model_catalog_snapshot: false
+  regime_thresholds:
+    help_min_lift: 0.05
+    collapse_max_lift: -0.05
+
+benchmarks:
+  - family: craft_mini
+    stage: clean
+    split: pilot
+    task_limit: 6
+  - family: agentsnet_mini
+    stage: clean
+    split: pilot
+    task_limit: 6
+
+model_panel:
+  - alias: mock-local
+    provider: mock
+    model_id: mock/p0a-local-v1
+    panel_tier: dev
+    temperature: 0.0
+    top_p: 1.0
+    max_completion_tokens: 96
+    allow_auto_routing: false
+
+sweep:
+  benchmark_families: [craft_mini, agentsnet_mini]
+  topology_presets: [star, balanced_tree, sparse_graph]
+  message_token_budgets: [0, 32, 96]
+  model_aliases: [mock-local]
+  model_tiers: []
+  baselines: [sa_star, vote_local, ma_ft]
+  seeds: [7]
