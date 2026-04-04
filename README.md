@@ -1,4 +1,4 @@
-# llm-coordination-harness
+# Llm coordination harness
 
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](./pyproject.toml)
 [![Stage](https://img.shields.io/badge/stage-clean%20%2B%20stress-darkgreen.svg)](./docs/CLAIM.md)
