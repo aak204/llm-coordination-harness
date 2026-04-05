@@ -62,6 +62,15 @@ def _short_family_name(name: str) -> str:
     return {"agentsnet_mini": "AgentsNet", "craft_mini": "CRAFT"}.get(name, name)
 
 
+def _topology_display_name(preset: str) -> str:
+    return {
+        "star": "Star",
+        "balanced_tree": "Balanced Tree",
+        "linear_chain": "Linear Chain",
+        "complete_graph": "Complete Graph",
+    }.get(preset, preset)
+
+
 def _plot_feature_importance(experiment_dir: Path, output_dir: Path) -> None:
     report = _load_json(experiment_dir / "predictor_analysis.json")
     target = report["targets"]["help_vs_rest"]
@@ -113,7 +122,7 @@ def _topology_rows(experiment_dir: Path, *, baseline: str = "ma_ft", budget: int
         rows.append(
             {
                 "label": f"{_short_family_name(entry['benchmark_family'])} / {_short_model_name(entry['model_alias'])}",
-                "topology": "Balanced Tree" if entry["topology_preset"] == "balanced_tree" else "Star",
+                "topology": _topology_display_name(entry["topology_preset"]),
                 "score": entry["score_mean"],
                 "F": summary["derived"]["F"] or 0.0,
                 "B": summary["derived"]["B"] or 0.0,
@@ -222,14 +231,14 @@ def _stress_rows(stress_dir: Path, clean_dir: Path) -> list[dict]:
     clean = _load_json(clean_dir / "batch_index.json")
     clean_map = {}
     for entry in clean["trials"]:
-        if entry["seed"] != 7:
-            continue
         key = (
             entry["benchmark_family"],
             entry["topology_preset"],
             entry["message_token_budget"],
             entry["model_alias"],
             entry["baseline"],
+            entry.get("attack_scenario"),
+            entry["seed"],
         )
         clean_map[key] = entry
 
@@ -242,17 +251,25 @@ def _stress_rows(stress_dir: Path, clean_dir: Path) -> list[dict]:
             entry["message_token_budget"],
             entry["model_alias"],
             entry["baseline"],
+            None,
+            entry["seed"],
         )
         clean_score = clean_map[key]["score_mean"]
+        attack_scenario = entry.get("attack_scenario")
+        scenario_suffix = f" / {attack_scenario}" if attack_scenario else ""
         rows.append(
             {
-                "label": f"{_short_family_name(entry['benchmark_family'])} / {_short_model_name(entry['model_alias'])} / {entry['baseline']}",
-                "topology": "Balanced Tree" if entry["topology_preset"] == "balanced_tree" else "Star",
+                "label": (
+                    f"{_short_family_name(entry['benchmark_family'])} / "
+                    f"{_short_model_name(entry['model_alias'])} / {entry['baseline']}{scenario_suffix} / seed {entry['seed']}"
+                ),
+                "topology": _topology_display_name(entry["topology_preset"]),
                 "delta_score": entry["score_mean"] - clean_score,
                 "infection": summary["outcomes"]["infection_spread_rate"] or 0.0,
                 "attack_success": summary["outcomes"]["attack_success_rate"] or 0.0,
                 "quarantine_strength": summary["outcomes"].get("quarantine_strength") or 0.0,
                 "f_delta": (summary.get("attack_analysis") or {}).get("F_delta_vs_clean"),
+                "attack_scenario": attack_scenario,
             }
         )
     return rows
@@ -395,6 +412,85 @@ def _plot_attack_f_tradeoff(stress_dir: Path, clean_dir: Path, output_dir: Path)
     _save_figure(fig, output_dir, "attack_f_delta_vs_infection_scatter")
 
 
+def _plot_leaf_topology_bar(stress_dir: Path, clean_dir: Path, output_dir: Path) -> None:
+    report = _load_attack_analysis_report(stress_dir, clean_dir)
+    rows = [
+        row
+        for row in report["rows"]
+        if row["attack_scenario"] == "leaf"
+        and row["baseline"] == "ma_ft"
+        and row["F_delta_vs_clean"] is not None
+    ]
+    if not rows:
+        return
+
+    grouped: dict[str, dict[str, float]] = {}
+    for topology in sorted({row["topology_preset"] for row in rows}):
+        items = [row for row in rows if row["topology_preset"] == topology]
+        grouped[topology] = {
+            "quarantine_strength": sum(row["quarantine_strength"] for row in items) / len(items),
+            "F_delta_vs_clean": sum(row["F_delta_vs_clean"] for row in items) / len(items),
+        }
+
+    labels = [_topology_display_name(topology) for topology in grouped]
+    x = list(range(len(labels)))
+    fig, axes = plt.subplots(2, 1, figsize=(10, 9), sharex=True)
+    metrics = [
+        ("quarantine_strength", "Quarantine Strength", "#246A73"),
+        ("F_delta_vs_clean", "F Drop vs Clean", "#C56B46"),
+    ]
+    for ax, (metric, title, color) in zip(axes, metrics):
+        values = [grouped[topology][metric] for topology in grouped]
+        bars = ax.bar(x, values, width=0.56, color=color)
+        _annotate_vertical_bars(ax, bars, fmt="{:.3f}", dy=0.01)
+        ax.set_ylabel(title)
+        ax.set_ylim(0, max(values) * 1.18 if values else 1.0)
+    axes[-1].set_xticks(x)
+    axes[-1].set_xticklabels(labels, rotation=12, ha="right")
+    fig.suptitle("Leaf Attack: Quarantine Strength vs F Drop Across Topologies (`MA-FT`, Gemini, budget 96)")
+    fig.text(0.01, 0.005, "Averages over CRAFT + AgentsNet and both seeds; leaf attack slice only.", fontsize=9)
+    _save_figure(fig, output_dir, "attack_leaf_topology_bar")
+
+
+def _plot_balanced_tree_leaf_vs_manager(stress_dir: Path, clean_dir: Path, output_dir: Path) -> None:
+    report = _load_attack_analysis_report(stress_dir, clean_dir)
+    rows = [
+        row
+        for row in report["rows"]
+        if row["baseline"] == "ma_ft"
+        and row["topology_preset"] == "balanced_tree"
+        and row["attack_scenario"] in {"leaf", "middle_manager"}
+        and row["score_delta_vs_clean"] is not None
+    ]
+    if not rows:
+        return
+
+    families = sorted({row["benchmark_family"] for row in rows})
+    scenarios = ["leaf", "middle_manager"]
+    matrix: list[list[float]] = []
+    for family in families:
+        family_rows = []
+        for scenario in scenarios:
+            items = [row for row in rows if row["benchmark_family"] == family and row["attack_scenario"] == scenario]
+            mean_delta = sum(item["score_delta_vs_clean"] for item in items) / len(items)
+            family_rows.append(-mean_delta)
+        matrix.append(family_rows)
+
+    fig, ax = plt.subplots(figsize=(6.8, 4.6))
+    image = ax.imshow(matrix, cmap="RdYlGn", vmin=min(min(row) for row in matrix), vmax=max(max(row) for row in matrix))
+    ax.set_xticks(range(len(scenarios)))
+    ax.set_xticklabels(["Leaf", "Middle Manager"])
+    ax.set_yticks(range(len(families)))
+    ax.set_yticklabels([_short_family_name(family) for family in families])
+    ax.set_title("Balanced Tree Score Drop: Leaf vs Middle-Manager Attack (`MA-FT`, Gemini, budget 96)")
+    for row_index, row in enumerate(matrix):
+        for col_index, value in enumerate(row):
+            ax.text(col_index, row_index, f"{value:+.2f}", ha="center", va="center", fontsize=10, color="#111111")
+    fig.colorbar(image, ax=ax, shrink=0.82, label="Clean - Stress Score")
+    fig.text(0.01, 0.005, "Averages over both seeds; more positive values indicate larger attack-induced score drop.", fontsize=9)
+    _save_figure(fig, output_dir, "attack_balanced_tree_leaf_vs_manager_heatmap")
+
+
 def generate_plots(
     clean_experiment_dir: str | Path = "outputs/p0a-calibrated-full-live",
     output_dir: str | Path = "docs/figures",
@@ -404,15 +500,23 @@ def generate_plots(
     stress_path = Path(stress_experiment_dir)
     output_path = Path(output_dir)
     _ensure_dir(output_path)
-    _plot_feature_importance(clean_path, output_path)
-    _plot_topology_penalty(clean_path, output_path)
-    _plot_topology_delta(clean_path, output_path)
-    _plot_predictor_holdout(clean_path, output_path)
+    if (clean_path / "predictor_analysis.json").exists():
+        _plot_feature_importance(clean_path, output_path)
+        _plot_predictor_holdout(clean_path, output_path)
+    if (clean_path / "batch_index.json").exists():
+        _plot_topology_penalty(clean_path, output_path)
+        _plot_topology_delta(clean_path, output_path)
     if stress_path.exists():
-        _plot_attack_score_delta(stress_path, clean_path, output_path)
-        _plot_attack_infection(stress_path, clean_path, output_path)
-        _plot_attack_success(stress_path, clean_path, output_path)
+        report = _load_attack_analysis_report(stress_path, clean_path)
+        topologies = {row["topology_preset"] for row in report["rows"]}
+        scenarios = {row.get("attack_scenario") or "default" for row in report["rows"]}
+        if topologies.issubset({"star", "balanced_tree"}) and len(scenarios) == 1:
+            _plot_attack_score_delta(stress_path, clean_path, output_path)
+            _plot_attack_infection(stress_path, clean_path, output_path)
+            _plot_attack_success(stress_path, clean_path, output_path)
         _plot_attack_f_tradeoff(stress_path, clean_path, output_path)
+        _plot_leaf_topology_bar(stress_path, clean_path, output_path)
+        _plot_balanced_tree_leaf_vs_manager(stress_path, clean_path, output_path)
     return output_path
 
 

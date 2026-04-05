@@ -23,6 +23,8 @@ def test_trial_summary_roundtrip() -> None:
             stage="clean",
             mode="research_strict",
             baseline="ma_ft",
+            attack_scenario=None,
+            attack_injection_depth=None,
             seed=7,
             status="completed",
             started_at="2026-01-01T00:00:00Z",

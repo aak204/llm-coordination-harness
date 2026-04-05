@@ -118,6 +118,8 @@ def write_attack_analysis(
             infection_spread_rate=summary.outcomes.infection_spread_rate,
             attack_success_rate=summary.outcomes.attack_success_rate,
             quarantine_strength=quarantine_strength,
+            attack_scenario=summary.run.attack_scenario,
+            attack_injection_depth=summary.run.attack_injection_depth,
             notes=notes,
         )
         summary_path.write_text(summary.model_dump_json(indent=2), encoding="utf-8")
@@ -138,14 +140,18 @@ def write_attack_analysis(
                 "attack_success_rate": summary.outcomes.attack_success_rate,
                 "quarantine_strength": quarantine_strength,
                 "score_delta_vs_clean": score_delta,
+                "attack_scenario": summary.run.attack_scenario,
+                "attack_injection_depth": summary.run.attack_injection_depth,
             }
         )
 
     by_topology: dict[str, list[dict[str, Any]]] = {}
     by_budget: dict[str, list[dict[str, Any]]] = {}
+    by_attack_scenario: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         by_topology.setdefault(row["topology_preset"], []).append(row)
         by_budget.setdefault(str(row["message_token_budget"]), []).append(row)
+        by_attack_scenario.setdefault(row["attack_scenario"] or "default", []).append(row)
 
     report = {
         "generated_at": datetime.now(UTC).isoformat(),
@@ -156,6 +162,9 @@ def write_attack_analysis(
             "overall": _correlation_payload(rows),
             "by_topology": {name: _correlation_payload(group) for name, group in sorted(by_topology.items())},
             "by_budget": {name: _correlation_payload(group) for name, group in sorted(by_budget.items())},
+            "by_attack_scenario": {
+                name: _correlation_payload(group) for name, group in sorted(by_attack_scenario.items())
+            },
         },
         "rows": rows,
     }

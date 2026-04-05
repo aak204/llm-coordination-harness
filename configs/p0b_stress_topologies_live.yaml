@@ -1,0 +1,67 @@
+run:
+  experiment_id: p0b-stress-topologies-live
+  framework_id: coord_harness_v1
+  stage: stress
+  mode: research_strict
+  description: Stress topology-zoo sweep comparing leaf and middle-manager attacks under Gemini-only budget-96 MA-FT.
+  output_root: outputs
+  agent_count: 9
+  total_billed_token_budget: 7000
+  max_concurrency: 25
+  capture_model_catalog_snapshot: true
+  regime_thresholds:
+    help_min_lift: 0.05
+    collapse_max_lift: -0.05
+  attack:
+    enabled: true
+    injection_depth: leaf
+    payload_type: hard_hallucination
+    target_answer_policy: first_wrong_option
+    compromise_confidence: 0.99
+    propagate_instruction: true
+    only_baselines: [ma_ft]
+    clean_reference_experiment_dir: outputs/p0a-topologies-control-live
+
+benchmarks:
+  - family: craft_mini
+    stage: clean
+    split: topology_zoo_stress
+    task_limit: 4
+  - family: agentsnet_mini
+    stage: clean
+    split: topology_zoo_stress
+    task_limit: 4
+
+model_panel:
+  - alias: gemini31_flash_lite_preview
+    provider: openrouter
+    model_id: google/gemini-3.1-flash-lite-preview
+    panel_tier: confirmatory
+    temperature: 0.0
+    top_p: 1.0
+    max_completion_tokens: 48
+    allow_auto_routing: false
+    reasoning:
+      effort: none
+      exclude: true
+    routing:
+      only: [google-ai-studio]
+      allow_fallbacks: false
+
+sweep:
+  benchmark_families: [craft_mini, agentsnet_mini]
+  topology_presets: [star, balanced_tree, linear_chain, complete_graph]
+  message_token_budgets: [96]
+  model_aliases: [gemini31_flash_lite_preview]
+  model_tiers: []
+  baselines: [ma_ft]
+  seeds: [7, 11]
+  attack_scenarios:
+    - name: leaf
+      injection_depth: leaf
+      payload_type: hard_hallucination
+      topology_presets: [star, balanced_tree, linear_chain, complete_graph]
+    - name: middle_manager
+      injection_depth: middle_manager
+      payload_type: hard_hallucination
+      topology_presets: [balanced_tree, linear_chain]

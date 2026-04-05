@@ -46,14 +46,15 @@ class AttackInjector:
     def _resolve_injection_depth(attack: dict[str, Any]) -> AttackInjectionDepth:
         configured_depth = attack.get("injection_depth")
         if configured_depth is not None:
-            return AttackInjectionDepth(configured_depth)
+            depth = AttackInjectionDepth(configured_depth)
+            return AttackInjectionDepth.MIDDLE_MANAGER if depth is AttackInjectionDepth.MANAGER else depth
 
         attack_mode = attack.get("attack_mode")
         attacker_policy = attack.get("attacker_policy")
         if attack_mode == AttackMode.COMPROMISED_LEAF.value or attacker_policy == "deepest_leaf":
             return AttackInjectionDepth.LEAF
-        if attacker_policy == "deepest_manager":
-            return AttackInjectionDepth.MANAGER
+        if attacker_policy in {"deepest_manager", "deepest_middle_manager"}:
+            return AttackInjectionDepth.MIDDLE_MANAGER
         return AttackInjectionDepth.LEAF
 
     def is_enabled_for_trial(self) -> bool:
@@ -73,7 +74,7 @@ class AttackInjector:
         if self.spec.injection_depth is AttackInjectionDepth.LEAF:
             agent_id = self._select_leaf_target(children, depths)
         else:
-            agent_id = self._select_manager_target(children, depths)
+            agent_id = self._select_middle_manager_target(children, depths)
         self._target = AttackTarget(
             agent_id=agent_id,
             injection_depth=self.spec.injection_depth,
@@ -233,12 +234,12 @@ class AttackInjector:
         leaves = [agent_id for agent_id in self._context.topology.agent_ids if agent_id not in children]
         return sorted(leaves, key=lambda agent_id: (depths.get(agent_id, 0), agent_id), reverse=True)[0]
 
-    def _select_manager_target(self, children: dict[str, list[str]], depths: dict[str, int]) -> str:
+    def _select_middle_manager_target(self, children: dict[str, list[str]], depths: dict[str, int]) -> str:
         root_agent = self._context.topology.root_agent
         managers = [agent_id for agent_id, child_nodes in children.items() if child_nodes and agent_id != root_agent]
         if not managers:
             raise ValueError(
-                f"Attack injection_depth=manager requires an intermediate manager; "
+                f"Attack injection_depth=middle_manager requires an intermediate manager; "
                 f"topology {self._context.topology.preset.value} has none."
             )
         return sorted(managers, key=lambda agent_id: (depths.get(agent_id, 0), agent_id), reverse=True)[0]

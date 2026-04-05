@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from coord_harness.config.models import BatchConfig, ModelSpec
+from coord_harness.config.models import AttackScenarioConfig, BatchConfig, ModelSpec
 from coord_harness.core.enums import BaselineStrategy, BenchmarkFamily, RunStage, TopologyPreset
 
 
@@ -29,9 +30,11 @@ class TrialConfig:
     config_digest: str
     config_path: Path
     attack: dict
+    attack_scenario_name: str | None = None
 
     @property
     def trial_id(self) -> str:
+        attack_suffix = f"__atk{self.attack_scenario_name}" if self.attack_scenario_name else ""
         return (
             f"{self.experiment_id}"
             f"__{self.benchmark_family.value}"
@@ -39,6 +42,7 @@ class TrialConfig:
             f"__msg{self.message_token_budget}"
             f"__{self.model_spec.alias}"
             f"__{self.baseline.value}"
+            f"{attack_suffix}"
             f"__seed{self.seed}"
         )
 
@@ -52,9 +56,35 @@ def load_config(config_path: str | Path) -> tuple[BatchConfig, str]:
     return config, config_digest
 
 
+def _merged_attack_payload(base_attack: dict[str, Any], scenario: AttackScenarioConfig | None) -> dict[str, Any]:
+    payload = deepcopy(base_attack)
+    if scenario is None:
+        return payload
+    scenario_payload = scenario.model_dump(mode="json", exclude_unset=True)
+    for key in ("name", "topology_presets", "baselines"):
+        scenario_payload.pop(key, None)
+    payload.update(scenario_payload)
+    return payload
+
+
+def _scenario_applies(
+    *,
+    scenario: AttackScenarioConfig,
+    topology: TopologyPreset,
+    baseline: BaselineStrategy,
+) -> bool:
+    if scenario.topology_presets and topology not in set(scenario.topology_presets):
+        return False
+    if scenario.baselines and baseline not in set(scenario.baselines):
+        return False
+    return True
+
+
 def expand_trials(config: BatchConfig, config_digest: str, config_path: str | Path) -> list[TrialConfig]:
     trials: list[TrialConfig] = []
     path = Path(config_path)
+    scenario_entries = config.sweep.attack_scenarios if config.run.stage is RunStage.STRESS and config.sweep.attack_scenarios else [None]
+    base_attack = config.run.attack.model_dump(mode="json")
     for family in config.sweep.benchmark_families:
         for topology in config.sweep.topology_presets:
             for message_budget in config.sweep.message_token_budgets:
@@ -62,25 +92,33 @@ def expand_trials(config: BatchConfig, config_digest: str, config_path: str | Pa
                     model_spec = config.model_spec_for(alias)
                     for baseline in config.sweep.baselines:
                         for seed in config.sweep.seeds:
-                            trials.append(
-                                TrialConfig(
-                                    experiment_id=config.run.experiment_id,
-                                    framework_id=config.run.framework_id,
-                                    stage=config.run.stage,
-                                    benchmark_family=family,
-                                    topology_preset=topology,
-                                    message_token_budget=message_budget,
-                                    model_spec=model_spec,
+                            for scenario in scenario_entries:
+                                if scenario is not None and not _scenario_applies(
+                                    scenario=scenario,
+                                    topology=topology,
                                     baseline=baseline,
-                                    seed=seed,
-                                    agent_count=config.run.agent_count,
-                                    total_billed_token_budget=config.run.total_billed_token_budget,
-                                    output_root=config.run.output_root,
-                                    config_digest=config_digest,
-                                    config_path=path,
-                                    attack=config.run.attack.model_dump(mode="json"),
+                                ):
+                                    continue
+                                trials.append(
+                                    TrialConfig(
+                                        experiment_id=config.run.experiment_id,
+                                        framework_id=config.run.framework_id,
+                                        stage=config.run.stage,
+                                        benchmark_family=family,
+                                        topology_preset=topology,
+                                        message_token_budget=message_budget,
+                                        model_spec=model_spec,
+                                        baseline=baseline,
+                                        seed=seed,
+                                        agent_count=config.run.agent_count,
+                                        total_billed_token_budget=config.run.total_billed_token_budget,
+                                        output_root=config.run.output_root,
+                                        config_digest=config_digest,
+                                        config_path=path,
+                                        attack=_merged_attack_payload(base_attack, scenario),
+                                        attack_scenario_name=scenario.name if scenario is not None else None,
+                                    )
                                 )
-                            )
     return trials
 
 

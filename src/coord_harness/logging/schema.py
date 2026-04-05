@@ -14,6 +14,8 @@ class RunSection(BaseModel):
     stage: str
     mode: str
     baseline: str
+    attack_scenario: str | None = None
+    attack_injection_depth: str | None = None
     seed: int
     status: str
     started_at: str
@@ -153,6 +155,8 @@ class AttackAnalysisSection(BaseModel):
     infection_spread_rate: float | None = None
     attack_success_rate: float | None = None
     quarantine_strength: float | None = None
+    attack_scenario: str | None = None
+    attack_injection_depth: str | None = None
     notes: list[str] = Field(default_factory=list)
 
 
@@ -181,6 +185,7 @@ class BatchIndexEntry(BaseModel):
     message_token_budget: int
     model_alias: str
     baseline: str
+    attack_scenario: str | None = None
     seed: int
     score_mean: float
     accuracy: float

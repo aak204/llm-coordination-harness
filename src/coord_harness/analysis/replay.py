@@ -81,12 +81,13 @@ def load_trial_artifacts(experiment_dir_or_batch_index: str | Path) -> list[Tria
     return artifacts
 
 
-def _trial_key(summary: TrialSummary) -> tuple[str, str, int, str, int]:
+def _trial_key(summary: TrialSummary) -> tuple[str, str, int, str, str | None, int]:
     return (
         summary.benchmark.family,
         summary.topology.preset,
         summary.budget.message_token_budget,
         summary.model.alias,
+        summary.run.attack_scenario,
         summary.run.seed,
     )
 

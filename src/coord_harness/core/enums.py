@@ -12,6 +12,8 @@ class BaselineStrategy(str, Enum):
 class TopologyPreset(str, Enum):
     STAR = "star"
     BALANCED_TREE = "balanced_tree"
+    LINEAR_CHAIN = "linear_chain"
+    COMPLETE_GRAPH = "complete_graph"
     SPARSE_GRAPH = "sparse_graph"
 
 
@@ -43,6 +45,7 @@ class AttackMode(str, Enum):
 
 class AttackInjectionDepth(str, Enum):
     LEAF = "leaf"
+    MIDDLE_MANAGER = "middle_manager"
     MANAGER = "manager"
 
 

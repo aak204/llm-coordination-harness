@@ -73,3 +73,58 @@ def test_dev_mode_allows_openrouter_auto() -> None:
     config, _digest = load_config(Path("archive/configs/openrouter_dev_smoke.yaml"))
     assert config.run.mode.value == "dev_convenience"
     assert config.model_panel[0].model_id == "openrouter/auto"
+
+
+def test_attack_scenarios_expand_only_matching_topologies() -> None:
+    payload = {
+        "run": {
+            "experiment_id": "stress-zoo",
+            "framework_id": "coord_harness_v1",
+            "stage": "stress",
+            "mode": "research_strict",
+            "agent_count": 5,
+            "total_billed_token_budget": 1000,
+            "attack": {
+                "enabled": True,
+                "injection_depth": "leaf",
+                "payload_type": "hard_hallucination",
+                "only_baselines": ["ma_ft"],
+            },
+        },
+        "benchmarks": [{"family": "craft_mini", "stage": "clean"}],
+        "model_panel": [
+            {
+                "alias": "mock",
+                "provider": "mock",
+                "model_id": "mock/unit",
+                "temperature": 0.0,
+                "top_p": 1.0,
+                "max_completion_tokens": 32,
+                "allow_auto_routing": False,
+            }
+        ],
+        "sweep": {
+            "benchmark_families": ["craft_mini"],
+            "topology_presets": ["star", "balanced_tree", "linear_chain", "complete_graph"],
+            "message_token_budgets": [96],
+            "model_aliases": ["mock"],
+            "baselines": ["ma_ft"],
+            "seeds": [7],
+            "attack_scenarios": [
+                {"name": "leaf", "injection_depth": "leaf"},
+                {
+                    "name": "middle_manager",
+                    "injection_depth": "middle_manager",
+                    "topology_presets": ["balanced_tree", "linear_chain"],
+                },
+            ],
+        },
+    }
+    config = BatchConfig.model_validate(payload)
+    trials = expand_trials(config, "digest", Path("stress-zoo.yaml"))
+    assert len(trials) == 6
+    scenario_pairs = {(trial.topology_preset.value, trial.attack_scenario_name) for trial in trials}
+    assert ("star", "middle_manager") not in scenario_pairs
+    assert ("complete_graph", "middle_manager") not in scenario_pairs
+    assert ("linear_chain", "middle_manager") in scenario_pairs
+    assert ("balanced_tree", "middle_manager") in scenario_pairs

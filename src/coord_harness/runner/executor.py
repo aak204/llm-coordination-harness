@@ -190,6 +190,8 @@ def _build_summary(
             stage=trial.stage.value,
             mode=batch_config.run.mode.value,
             baseline=trial.baseline.value,
+            attack_scenario=trial.attack_scenario_name,
+            attack_injection_depth=trial.attack.get("injection_depth"),
             seed=trial.seed,
             status="completed",
             started_at=started_at,
@@ -350,12 +352,13 @@ def run_trial(batch_config: BatchConfig, trial: TrialConfig) -> tuple[TrialSumma
     return summary, writer.summary_path
 
 
-def _comparison_key(summary: TrialSummary) -> tuple[str, str, int, str, int]:
+def _comparison_key(summary: TrialSummary) -> tuple[str, str, int, str, str | None, int]:
     return (
         summary.benchmark.family,
         summary.topology.preset,
         summary.budget.message_token_budget,
         summary.model.alias,
+        summary.run.attack_scenario,
         summary.run.seed,
     )
 
@@ -395,6 +398,7 @@ def postprocess_summaries(*, summaries: list[tuple[TrialSummary, Path]], batch_c
                 message_token_budget=summary.budget.message_token_budget,
                 model_alias=summary.model.alias,
                 baseline=summary.run.baseline,
+                attack_scenario=summary.run.attack_scenario,
                 seed=summary.run.seed,
                 score_mean=summary.outcomes.score_mean,
                 accuracy=summary.outcomes.accuracy,
@@ -452,6 +456,7 @@ def validate_only(config_path: str | Path) -> str:
         "model_aliases": batch_config.selected_model_aliases(),
         "model_tiers": [tier.value for tier in batch_config.sweep.model_tiers],
         "baselines": [strategy.value for strategy in batch_config.sweep.baselines],
+        "attack_scenarios": [scenario.name for scenario in batch_config.sweep.attack_scenarios],
         "seeds": batch_config.sweep.seeds,
     }
     return json.dumps(payload, indent=2, sort_keys=True)

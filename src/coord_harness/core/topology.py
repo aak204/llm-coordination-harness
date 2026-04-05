@@ -88,6 +88,13 @@ def build_topology(preset: TopologyPreset, agent_count: int, seed: int) -> Topol
         for child_index in range(1, agent_count):
             parent_index = (child_index - 1) // 2
             undirected_edges.add((agent_ids[parent_index], agent_ids[child_index]))
+    elif preset is TopologyPreset.LINEAR_CHAIN:
+        for idx in range(agent_count - 1):
+            undirected_edges.add((agent_ids[idx], agent_ids[idx + 1]))
+    elif preset is TopologyPreset.COMPLETE_GRAPH:
+        for left_index in range(agent_count):
+            for right_index in range(left_index + 1, agent_count):
+                undirected_edges.add((agent_ids[left_index], agent_ids[right_index]))
     elif preset is TopologyPreset.SPARSE_GRAPH:
         rng = random.Random(seed)
         for idx in range(agent_count):

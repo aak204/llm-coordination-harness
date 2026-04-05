@@ -109,24 +109,35 @@ class AttackConfig(BaseModel):
         if inferred_depth is None:
             if self.attack_mode is AttackMode.COMPROMISED_LEAF or self.attacker_policy == "deepest_leaf":
                 inferred_depth = AttackInjectionDepth.LEAF
-            elif self.attacker_policy == "deepest_manager":
-                inferred_depth = AttackInjectionDepth.MANAGER
+            elif self.attacker_policy in {"deepest_manager", "deepest_middle_manager"}:
+                inferred_depth = AttackInjectionDepth.MIDDLE_MANAGER
             else:
                 inferred_depth = AttackInjectionDepth.LEAF
+            self.injection_depth = inferred_depth
+        elif inferred_depth is AttackInjectionDepth.MANAGER:
+            inferred_depth = AttackInjectionDepth.MIDDLE_MANAGER
             self.injection_depth = inferred_depth
 
         if self.attack_mode is AttackMode.COMPROMISED_LEAF and inferred_depth is not AttackInjectionDepth.LEAF:
             raise ValueError("attack_mode=compromised_leaf is only compatible with injection_depth=leaf")
         if self.attacker_policy == "deepest_leaf" and inferred_depth is not AttackInjectionDepth.LEAF:
             raise ValueError("attacker_policy=deepest_leaf is only compatible with injection_depth=leaf")
-        if self.attacker_policy == "deepest_manager" and inferred_depth is not AttackInjectionDepth.MANAGER:
-            raise ValueError("attacker_policy=deepest_manager is only compatible with injection_depth=manager")
+        if self.attacker_policy in {"deepest_manager", "deepest_middle_manager"} and inferred_depth is not AttackInjectionDepth.MIDDLE_MANAGER:
+            raise ValueError("manager attacker policies are only compatible with injection_depth=middle_manager")
 
         if self.attack_mode is None and inferred_depth is AttackInjectionDepth.LEAF:
             self.attack_mode = AttackMode.COMPROMISED_LEAF
         if self.attacker_policy is None:
-            self.attacker_policy = "deepest_leaf" if inferred_depth is AttackInjectionDepth.LEAF else "deepest_manager"
+            self.attacker_policy = "deepest_leaf" if inferred_depth is AttackInjectionDepth.LEAF else "deepest_middle_manager"
         return self
+
+
+class AttackScenarioConfig(AttackConfig):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    topology_presets: list[TopologyPreset] = Field(default_factory=list)
+    baselines: list[BaselineStrategy] = Field(default_factory=list)
 
 
 class RunMetadataConfig(BaseModel):
@@ -178,6 +189,7 @@ class SweepConfig(BaseModel):
     model_tiers: list[PanelTier] = Field(default_factory=list)
     baselines: list[BaselineStrategy]
     seeds: list[int]
+    attack_scenarios: list[AttackScenarioConfig] = Field(default_factory=list)
 
     @field_validator("message_token_budgets")
     @classmethod
@@ -193,6 +205,9 @@ class SweepConfig(BaseModel):
     def validate_model_selection(self) -> "SweepConfig":
         if not self.model_aliases and not self.model_tiers:
             raise ValueError("Sweep must select models via model_aliases or model_tiers.")
+        scenario_names = [scenario.name for scenario in self.attack_scenarios]
+        if len(scenario_names) != len(set(scenario_names)):
+            raise ValueError(f"attack_scenarios must have unique names; got duplicates in {scenario_names}")
         return self
 
 
@@ -210,6 +225,8 @@ class BatchConfig(BaseModel):
             raise ValueError("Attack layer must be disabled in clean stage.")
         if self.run.stage is RunStage.STRESS and not self.run.attack.enabled:
             raise ValueError("Stress stage requires attack.enabled=true.")
+        if self.run.stage is RunStage.CLEAN and self.sweep.attack_scenarios:
+            raise ValueError("attack_scenarios are only valid for stress runs.")
 
         benchmark_families = {entry.family for entry in self.benchmarks}
         if not set(self.sweep.benchmark_families).issubset(benchmark_families):
@@ -225,6 +242,22 @@ class BatchConfig(BaseModel):
         if not set(self.sweep.model_tiers).issubset(available_tiers):
             missing_tiers = set(self.sweep.model_tiers) - available_tiers
             raise ValueError(f"Sweep references undefined model tiers: {sorted(t.value for t in missing_tiers)}")
+
+        available_topologies = set(self.sweep.topology_presets)
+        available_baselines = set(self.sweep.baselines)
+        for scenario in self.sweep.attack_scenarios:
+            if scenario.topology_presets and not set(scenario.topology_presets).issubset(available_topologies):
+                missing_topologies = set(scenario.topology_presets) - available_topologies
+                raise ValueError(
+                    f"Attack scenario {scenario.name} references undefined topology presets: "
+                    f"{sorted(item.value for item in missing_topologies)}"
+                )
+            if scenario.baselines and not set(scenario.baselines).issubset(available_baselines):
+                missing_baselines = set(scenario.baselines) - available_baselines
+                raise ValueError(
+                    f"Attack scenario {scenario.name} references undefined baselines: "
+                    f"{sorted(item.value for item in missing_baselines)}"
+                )
 
         for benchmark in self.benchmarks:
             if self.run.stage is RunStage.STRESS:

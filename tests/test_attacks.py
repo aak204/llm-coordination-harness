@@ -5,7 +5,9 @@ from pathlib import Path
 
 from coord_harness.analysis.attack_analysis import write_attack_analysis
 from coord_harness.attacks import AttackInjector
+from coord_harness.baselines.ma_ft import MAFTExecutor
 from coord_harness.baselines.base import StrategyContext
+from coord_harness.baselines.vote_local import VoteLocalExecutor
 from coord_harness.config.loader import TrialConfig
 from coord_harness.config.models import BenchmarkAdapterConfig, ModelSpec
 from coord_harness.core.enums import (
@@ -34,7 +36,7 @@ from coord_harness.logging.schema import (
 from coord_harness.models.mock import MockModelClient
 
 
-def _context(*, topology_preset: TopologyPreset, attack: dict) -> StrategyContext:
+def _context(*, topology_preset: TopologyPreset, attack: dict, total_billed_token_budget: int = 1000) -> StrategyContext:
     model_spec = ModelSpec(
         alias="mock-local",
         provider=ModelProvider.MOCK,
@@ -52,7 +54,7 @@ def _context(*, topology_preset: TopologyPreset, attack: dict) -> StrategyContex
         baseline=BaselineStrategy.MA_FT,
         seed=7,
         agent_count=9,
-        total_billed_token_budget=1000,
+        total_billed_token_budget=total_billed_token_budget,
         output_root=Path("outputs"),
         config_digest="digest",
         config_path=Path("configs/unit.yaml"),
@@ -128,7 +130,7 @@ def test_attack_injector_selects_manager_and_rejects_star_without_intermediate_m
         topology_preset=TopologyPreset.BALANCED_TREE,
         attack={
             "enabled": True,
-            "injection_depth": AttackInjectionDepth.MANAGER.value,
+            "injection_depth": AttackInjectionDepth.MIDDLE_MANAGER.value,
             "payload_type": "hard_hallucination",
             "only_baselines": [BaselineStrategy.MA_FT.value],
         },
@@ -142,7 +144,7 @@ def test_attack_injector_selects_manager_and_rejects_star_without_intermediate_m
         topology_preset=TopologyPreset.STAR,
         attack={
             "enabled": True,
-            "injection_depth": AttackInjectionDepth.MANAGER.value,
+            "injection_depth": AttackInjectionDepth.MIDDLE_MANAGER.value,
             "payload_type": "hard_hallucination",
             "only_baselines": [BaselineStrategy.MA_FT.value],
         },
@@ -154,6 +156,36 @@ def test_attack_injector_selects_manager_and_rejects_star_without_intermediate_m
         assert "requires an intermediate manager" in str(exc)
     else:
         raise AssertionError("Expected manager injection on star topology to fail.")
+
+
+def test_attack_injector_selects_middle_manager_in_linear_chain() -> None:
+    context = _context(
+        topology_preset=TopologyPreset.LINEAR_CHAIN,
+        attack={
+            "enabled": True,
+            "injection_depth": AttackInjectionDepth.MIDDLE_MANAGER.value,
+            "payload_type": "hard_hallucination",
+            "only_baselines": [BaselineStrategy.MA_FT.value],
+        },
+    )
+    injector = AttackInjector.from_context(context)
+    target = injector.select_target()
+    assert target.agent_id == "agent_7"
+    assert target.path_to_root[0] == "agent_7"
+    assert target.path_to_root[-1] == "agent_0"
+
+
+def test_executors_support_linear_chain_and_complete_graph() -> None:
+    task = _task()
+    for topology_preset in (TopologyPreset.LINEAR_CHAIN, TopologyPreset.COMPLETE_GRAPH):
+        context = _context(topology_preset=topology_preset, attack={"enabled": False}, total_billed_token_budget=5000)
+        trace, _events = MAFTExecutor().run_task(task=task, context=context)
+        assert trace.selected_answer in task.answer_choices
+        assert len(trace.messages) == len(context.topology.agent_ids) - 1
+
+        vote_trace, _vote_events = VoteLocalExecutor().run_task(task=task, context=context)
+        assert vote_trace.selected_answer in task.answer_choices
+        assert vote_trace.messages == []
 
 
 def test_attack_analysis_report_enriches_stress_summary_with_f_delta(tmp_path: Path) -> None:
@@ -171,6 +203,8 @@ def test_attack_analysis_report_enriches_stress_summary_with_f_delta(tmp_path: P
                 stage="stress" if infection is not None else "clean",
                 mode="research_strict",
                 baseline="ma_ft",
+                attack_scenario="leaf" if infection is not None else None,
+                attack_injection_depth="leaf" if infection is not None else None,
                 seed=7,
                 status="completed",
                 started_at="2026-01-01T00:00:00Z",
@@ -276,6 +310,7 @@ def test_attack_analysis_report_enriches_stress_summary_with_f_delta(tmp_path: P
                         "message_token_budget": 32,
                         "model_alias": "qwen35_plus_0215",
                         "baseline": "ma_ft",
+                        "attack_scenario": None,
                         "seed": 7,
                         "score_mean": 1.0,
                         "accuracy": 1.0,
@@ -300,6 +335,7 @@ def test_attack_analysis_report_enriches_stress_summary_with_f_delta(tmp_path: P
                         "message_token_budget": 32,
                         "model_alias": "qwen35_plus_0215",
                         "baseline": "ma_ft",
+                        "attack_scenario": "leaf",
                         "seed": 7,
                         "score_mean": 0.5,
                         "accuracy": 0.5,
@@ -320,3 +356,4 @@ def test_attack_analysis_report_enriches_stress_summary_with_f_delta(tmp_path: P
     assert enriched_summary.attack_analysis is not None
     assert enriched_summary.attack_analysis.F_delta_vs_clean == 0.4
     assert enriched_summary.attack_analysis.score_delta_vs_clean == -0.5
+    assert enriched_summary.attack_analysis.attack_scenario == "leaf"

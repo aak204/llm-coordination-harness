@@ -52,6 +52,8 @@ def test_fact_survival_extractors_do_not_copy_final_score() -> None:
             stage="clean",
             mode="research_strict",
             baseline="ma_ft",
+            attack_scenario=None,
+            attack_injection_depth=None,
             seed=7,
             status="completed",
             started_at="2026-01-01T00:00:00Z",
