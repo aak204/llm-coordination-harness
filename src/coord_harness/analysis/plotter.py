@@ -5,6 +5,9 @@ from collections import defaultdict
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+from coord_harness.analysis.attack_analysis import write_attack_analysis
 
 
 def _load_json(path: Path) -> dict:
@@ -248,9 +251,18 @@ def _stress_rows(stress_dir: Path, clean_dir: Path) -> list[dict]:
                 "delta_score": entry["score_mean"] - clean_score,
                 "infection": summary["outcomes"]["infection_spread_rate"] or 0.0,
                 "attack_success": summary["outcomes"]["attack_success_rate"] or 0.0,
+                "quarantine_strength": summary["outcomes"].get("quarantine_strength") or 0.0,
+                "f_delta": (summary.get("attack_analysis") or {}).get("F_delta_vs_clean"),
             }
         )
     return rows
+
+
+def _load_attack_analysis_report(stress_dir: Path, clean_dir: Path) -> dict:
+    report_path = stress_dir / "attack_analysis_report.json"
+    if not report_path.exists():
+        report_path = write_attack_analysis(stress_dir, clean_dir)
+    return _load_json(report_path)
 
 
 def _plot_attack_score_delta(stress_dir: Path, clean_dir: Path, output_dir: Path) -> None:
@@ -316,10 +328,77 @@ def _plot_attack_success(stress_dir: Path, clean_dir: Path, output_dir: Path) ->
     _save_figure(fig, output_dir, "attack_success_rate")
 
 
+def _plot_attack_f_tradeoff(stress_dir: Path, clean_dir: Path, output_dir: Path) -> None:
+    report = _load_attack_analysis_report(stress_dir, clean_dir)
+    rows = [
+        row
+        for row in report["rows"]
+        if row["F_delta_vs_clean"] is not None and row["infection_spread_rate"] is not None
+    ]
+    if not rows:
+        return
+
+    colors = {"star": "#2A9D8F", "balanced_tree": "#E76F51"}
+    fig, ax = plt.subplots(figsize=(11, 7))
+    for row in rows:
+        x_value = row["F_delta_vs_clean"]
+        y_value = row["infection_spread_rate"]
+        ax.scatter(
+            x_value,
+            y_value,
+            s=90,
+            color=colors.get(row["topology_preset"], "#444444"),
+            alpha=0.9,
+        )
+        point_label = (
+            f"{_short_family_name(row['benchmark_family'])}/"
+            f"{_short_model_name(row['model_alias'])}/"
+            f"{row['message_token_budget']}"
+        )
+        ax.text(x_value + 0.006, y_value + 0.01, point_label, fontsize=8)
+
+    correlation = report["correlations"]["overall"]
+    xs = [row["F_delta_vs_clean"] for row in rows]
+    ys = [row["infection_spread_rate"] for row in rows]
+    slope = correlation.get("linear_slope")
+    if slope is not None and len(xs) >= 2:
+        mean_x = sum(xs) / len(xs)
+        mean_y = sum(ys) / len(ys)
+        intercept = mean_y - slope * mean_x
+        start_x = min(xs)
+        end_x = max(xs)
+        ax.plot(
+            [start_x, end_x],
+            [slope * start_x + intercept, slope * end_x + intercept],
+            color="#264653",
+            linewidth=1.8,
+        )
+
+    ax.set_xlabel("F Drop vs Clean (clean F - stress F)")
+    ax.set_ylabel("Infection Spread Rate")
+    ax.set_ylim(0, 1.05)
+    ax.set_title("Natural Quarantine Tradeoff: Useful Fact Loss vs Viral Spread")
+    legend_handles = [
+        Line2D([], [], marker="o", linestyle="", color=colors["star"], label="Star", markersize=8),
+        Line2D([], [], marker="o", linestyle="", color=colors["balanced_tree"], label="Balanced Tree", markersize=8),
+    ]
+    ax.legend(handles=legend_handles, loc="upper right")
+    fig.text(
+        0.01,
+        0.005,
+        (
+            "Each point is one stress cell with a matched clean control; "
+            f"overall Pearson r = {correlation.get('pearson_r')}, slope = {correlation.get('linear_slope')}."
+        ),
+        fontsize=9,
+    )
+    _save_figure(fig, output_dir, "attack_f_delta_vs_infection_scatter")
+
+
 def generate_plots(
     clean_experiment_dir: str | Path = "outputs/p0a-calibrated-full-live",
     output_dir: str | Path = "docs/figures",
-    stress_experiment_dir: str | Path = "outputs/p0b-attacks-live",
+    stress_experiment_dir: str | Path = "outputs/p0b-systematic-attacks",
 ) -> Path:
     clean_path = Path(clean_experiment_dir)
     stress_path = Path(stress_experiment_dir)
@@ -333,6 +412,7 @@ def generate_plots(
         _plot_attack_score_delta(stress_path, clean_path, output_path)
         _plot_attack_infection(stress_path, clean_path, output_path)
         _plot_attack_success(stress_path, clean_path, output_path)
+        _plot_attack_f_tradeoff(stress_path, clean_path, output_path)
     return output_path
 
 

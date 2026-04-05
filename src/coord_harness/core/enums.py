@@ -41,6 +41,16 @@ class AttackMode(str, Enum):
     COMPROMISED_LEAF = "compromised_leaf"
 
 
+class AttackInjectionDepth(str, Enum):
+    LEAF = "leaf"
+    MANAGER = "manager"
+
+
+class AttackPayloadType(str, Enum):
+    HARD_HALLUCINATION = "hard_hallucination"
+    PROMPT_OVERRIDE = "prompt_override"
+
+
 class RunStage(str, Enum):
     CLEAN = "clean"
     STRESS = "stress"

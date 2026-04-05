@@ -25,7 +25,7 @@ from coord_harness.runner.executor import run_batch
 
 
 def test_recompute_deriveds_updates_summary_from_logs(tmp_path: Path) -> None:
-    payload = yaml.safe_load(Path("configs/p0a_clean_smoke.yaml").read_text(encoding="utf-8"))
+    payload = yaml.safe_load(Path("archive/configs/p0a_clean_smoke.yaml").read_text(encoding="utf-8"))
     payload["run"]["output_root"] = str(tmp_path)
     payload["benchmarks"][0]["task_limit"] = 1
     payload["benchmarks"][1]["task_limit"] = 1

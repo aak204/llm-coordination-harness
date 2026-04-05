@@ -5,7 +5,9 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from coord_harness.core.enums import (
+    AttackInjectionDepth,
     AttackMode,
+    AttackPayloadType,
     BaselineStrategy,
     BenchmarkFamily,
     ModelProvider,
@@ -84,12 +86,47 @@ class AttackConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
-    attack_mode: AttackMode = AttackMode.COMPROMISED_LEAF
-    attacker_policy: str = "deepest_leaf"
+    injection_depth: AttackInjectionDepth | None = None
+    payload_type: AttackPayloadType = AttackPayloadType.HARD_HALLUCINATION
     target_answer_policy: str = "first_wrong_option"
     compromise_confidence: float = 0.99
     propagate_instruction: bool = True
     only_baselines: list[BaselineStrategy] = Field(default_factory=list)
+    clean_reference_experiment_dir: Path | None = None
+    attack_mode: AttackMode | None = None
+    attacker_policy: str | None = None
+
+    @field_validator("compromise_confidence")
+    @classmethod
+    def validate_compromise_confidence(cls, value: float) -> float:
+        if value < 0.0 or value > 1.0:
+            raise ValueError("compromise_confidence must be between 0.0 and 1.0")
+        return value
+
+    @model_validator(mode="after")
+    def normalize_legacy_attack_fields(self) -> "AttackConfig":
+        inferred_depth = self.injection_depth
+        if inferred_depth is None:
+            if self.attack_mode is AttackMode.COMPROMISED_LEAF or self.attacker_policy == "deepest_leaf":
+                inferred_depth = AttackInjectionDepth.LEAF
+            elif self.attacker_policy == "deepest_manager":
+                inferred_depth = AttackInjectionDepth.MANAGER
+            else:
+                inferred_depth = AttackInjectionDepth.LEAF
+            self.injection_depth = inferred_depth
+
+        if self.attack_mode is AttackMode.COMPROMISED_LEAF and inferred_depth is not AttackInjectionDepth.LEAF:
+            raise ValueError("attack_mode=compromised_leaf is only compatible with injection_depth=leaf")
+        if self.attacker_policy == "deepest_leaf" and inferred_depth is not AttackInjectionDepth.LEAF:
+            raise ValueError("attacker_policy=deepest_leaf is only compatible with injection_depth=leaf")
+        if self.attacker_policy == "deepest_manager" and inferred_depth is not AttackInjectionDepth.MANAGER:
+            raise ValueError("attacker_policy=deepest_manager is only compatible with injection_depth=manager")
+
+        if self.attack_mode is None and inferred_depth is AttackInjectionDepth.LEAF:
+            self.attack_mode = AttackMode.COMPROMISED_LEAF
+        if self.attacker_policy is None:
+            self.attacker_policy = "deepest_leaf" if inferred_depth is AttackInjectionDepth.LEAF else "deepest_manager"
+        return self
 
 
 class RunMetadataConfig(BaseModel):

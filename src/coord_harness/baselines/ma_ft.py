@@ -24,6 +24,7 @@ class MAFTExecutor(BaselineExecutor):
 
     def run_task(self, *, task: BenchmarkTask, context: StrategyContext) -> tuple[TaskRunTrace, list[dict]]:
         ledger = BudgetLedger(context.trial.total_billed_token_budget)
+        attack_injector = self.build_attack_injector(context)
         initial_states: dict[str, AgentDecision] = {}
         final_states: dict[str, AgentDecision] = {}
         events: list[dict] = []
@@ -43,7 +44,7 @@ class MAFTExecutor(BaselineExecutor):
                 agent_id=agent_id,
                 decision=decision,
                 result=result,
-                context=context,
+                attack_injector=attack_injector,
             )
             model_call_count += 1
             initial_states[agent_id] = decision
@@ -216,7 +217,7 @@ class MAFTExecutor(BaselineExecutor):
                     task=task,
                     final_states=[final_states[agent_id] for agent_id in context.topology.agent_ids],
                     selected_answer=root_state.answer,
-                    context=context,
+                    attack_injector=attack_injector,
                 ),
             },
         )

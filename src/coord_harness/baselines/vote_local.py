@@ -10,6 +10,7 @@ class VoteLocalExecutor(BaselineExecutor):
 
     def run_task(self, *, task: BenchmarkTask, context: StrategyContext) -> tuple[TaskRunTrace, list[dict]]:
         ledger = BudgetLedger(context.trial.total_billed_token_budget)
+        attack_injector = self.build_attack_injector(context)
         initial_states = []
         events: list[dict] = []
         route_metadata = []
@@ -26,7 +27,7 @@ class VoteLocalExecutor(BaselineExecutor):
                 agent_id=agent_id,
                 decision=decision,
                 result=result,
-                context=context,
+                attack_injector=attack_injector,
             )
             initial_states.append(decision)
             route_metadata.append(result.route_metadata)
@@ -72,7 +73,7 @@ class VoteLocalExecutor(BaselineExecutor):
                     task=task,
                     final_states=list(initial_states),
                     selected_answer=selected_answer,
-                    context=context,
+                    attack_injector=attack_injector,
                 ),
             },
         )

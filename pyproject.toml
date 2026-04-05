@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "coord-harness"
-version = "0.1.0"
+version = "0.2.0"
 description = "Minimal reproducible research harness for multi-agent coordination P0a clean gate."
 readme = "docs/RUNBOOK.md"
 requires-python = ">=3.12"

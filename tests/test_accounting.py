@@ -8,7 +8,7 @@ from coord_harness.runner.executor import run_batch
 
 
 def test_zero_message_budget_produces_zero_inter_agent_tokens_and_zero_messages(tmp_path: Path) -> None:
-    payload = yaml.safe_load(Path("configs/p0a_clean_smoke.yaml").read_text(encoding="utf-8"))
+    payload = yaml.safe_load(Path("archive/configs/p0a_clean_smoke.yaml").read_text(encoding="utf-8"))
     payload["run"]["output_root"] = str(tmp_path)
     payload["benchmarks"][0]["task_limit"] = 1
     payload["benchmarks"][1]["task_limit"] = 1
@@ -27,7 +27,7 @@ def test_zero_message_budget_produces_zero_inter_agent_tokens_and_zero_messages(
 
 
 def test_maft_accounts_extra_fusion_calls_over_vote_local(tmp_path: Path) -> None:
-    payload = yaml.safe_load(Path("configs/p0a_clean_smoke.yaml").read_text(encoding="utf-8"))
+    payload = yaml.safe_load(Path("archive/configs/p0a_clean_smoke.yaml").read_text(encoding="utf-8"))
     payload["run"]["output_root"] = str(tmp_path)
     payload["benchmarks"][0]["task_limit"] = 1
     payload["benchmarks"][1]["task_limit"] = 1

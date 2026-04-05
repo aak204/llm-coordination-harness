@@ -8,7 +8,7 @@ from coord_harness.runner.executor import run_batch
 
 
 def test_smoke_run_produces_batch_index_and_summaries(tmp_path: Path) -> None:
-    config_path = Path("configs/p0a_clean_smoke.yaml")
+    config_path = Path("archive/configs/p0a_clean_smoke.yaml")
     payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     payload["run"]["output_root"] = str(tmp_path)
     temp_config = tmp_path / "smoke.yaml"

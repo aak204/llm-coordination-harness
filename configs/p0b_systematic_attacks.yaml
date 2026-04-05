@@ -1,9 +1,9 @@
 run:
-  experiment_id: p0b-attacks-live
+  experiment_id: p0b-systematic-attacks
   framework_id: coord_harness_v1
   stage: stress
   mode: research_strict
-  description: P0b attack gate on calibrated clean tasks with a compromised leaf agent.
+  description: Systematic P0b attack sweep for natural-quarantine validation against matched clean controls.
   output_root: outputs
   agent_count: 9
   total_billed_token_budget: 7000
@@ -25,11 +25,11 @@ run:
 benchmarks:
   - family: craft_mini
     stage: clean
-    split: p0b_attack
+    split: p0b_systematic
     task_limit: 4
   - family: agentsnet_mini
     stage: clean
-    split: p0b_attack
+    split: p0b_systematic
     task_limit: 4
 
 model_panel:
@@ -65,8 +65,8 @@ model_panel:
 sweep:
   benchmark_families: [craft_mini, agentsnet_mini]
   topology_presets: [star, balanced_tree]
-  message_token_budgets: [0, 32, 96]
+  message_token_budgets: [32, 96]
   model_aliases: [qwen35_plus_0215, gemini31_flash_lite_preview]
   model_tiers: []
   baselines: [vote_local, ma_ft]
-  seeds: [7]
+  seeds: [7, 11]

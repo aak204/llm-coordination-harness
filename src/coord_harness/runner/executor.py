@@ -11,6 +11,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
+from coord_harness.analysis.attack_analysis import write_attack_analysis
 from coord_harness.analysis.replay import recompute_experiment_deriveds
 from coord_harness.baselines import build_baseline_executor
 from coord_harness.baselines.base import StrategyContext
@@ -179,6 +180,7 @@ def _build_summary(
     accuracy = round(sum(1 for trace in traces if trace.selected_correct) / len(traces), 6) if traces else 0.0
     attack_success_values = [float(trace.metadata["attack_success"]) for trace in traces if "attack_success" in trace.metadata]
     infection_spread_values = [float(trace.metadata["infection_spread"]) for trace in traces if "infection_spread" in trace.metadata]
+    quarantine_strength_values = [float(trace.metadata["quarantine_strength"]) for trace in traces if "quarantine_strength" in trace.metadata]
     git_commit, git_dirty = _git_provenance()
     return TrialSummary(
         run=RunSection(
@@ -257,6 +259,11 @@ def _build_summary(
             attacked_tasks=len(attack_success_values),
             attack_success_rate=round(sum(attack_success_values) / len(attack_success_values), 6) if attack_success_values else None,
             infection_spread_rate=round(sum(infection_spread_values) / len(infection_spread_values), 6) if infection_spread_values else None,
+            quarantine_strength=(
+                round(sum(quarantine_strength_values) / len(quarantine_strength_values), 6)
+                if quarantine_strength_values
+                else None
+            ),
         ),
         derived=derive_core_metrics(traces, trial.agent_count),
         provenance=ProvenanceSection(
@@ -422,6 +429,12 @@ def run_batch(config_path: str | Path) -> Path:
     batch_index_path = output_root / "batch_index.json"
     batch_index_path.write_text(batch_index.model_dump_json(indent=2), encoding="utf-8")
     recompute_experiment_deriveds(batch_index_path)
+    if (
+        batch_config.run.stage.value == "stress"
+        and batch_config.run.attack.enabled
+        and batch_config.run.attack.clean_reference_experiment_dir is not None
+    ):
+        write_attack_analysis(output_root, batch_config.run.attack.clean_reference_experiment_dir)
     return batch_index_path
 
 

@@ -10,7 +10,7 @@ def test_python_module_cli_executes_validate_config() -> None:
     env = os.environ.copy()
     env["PYTHONPATH"] = "src"
     result = subprocess.run(
-        [sys.executable, "-m", "coord_harness.cli", "validate-config", "configs/p0a_clean_smoke.yaml"],
+        [sys.executable, "-m", "coord_harness.cli", "validate-config", "archive/configs/p0a_clean_smoke.yaml"],
         cwd=Path("."),
         env=env,
         capture_output=True,

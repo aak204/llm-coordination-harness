@@ -100,6 +100,7 @@ class OutcomeSection(BaseModel):
     attacked_tasks: int = 0
     attack_success_rate: float | None = None
     infection_spread_rate: float | None = None
+    quarantine_strength: float | None = None
 
 
 class DerivedSection(BaseModel):
@@ -139,6 +140,22 @@ class ProvenanceSection(BaseModel):
     model_catalog_snapshot_fetched_at: str | None = None
 
 
+class AttackAnalysisSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    clean_reference_experiment_id: str | None = None
+    clean_reference_experiment_dir: str | None = None
+    clean_reference_summary_path: str | None = None
+    clean_F: float | None = None
+    stress_F: float | None = None
+    F_delta_vs_clean: float | None = None
+    score_delta_vs_clean: float | None = None
+    infection_spread_rate: float | None = None
+    attack_success_rate: float | None = None
+    quarantine_strength: float | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
 class TrialSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -151,6 +168,7 @@ class TrialSummary(BaseModel):
     derived: DerivedSection
     provenance: ProvenanceSection
     events_path: str
+    attack_analysis: AttackAnalysisSection | None = None
 
 
 class BatchIndexEntry(BaseModel):
