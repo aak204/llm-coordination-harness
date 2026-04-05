@@ -7,8 +7,6 @@
 
 `llm-coordination-harness` is a reproducible research rig for measuring vulnerability in multi-agent LLM systems under fixed billed-token budgets.
 
-![Release Hero](./docs/figures/release_hero_v1.gif)
-
 ## 10-Second Read
 
 - `linear_chain` and `balanced_tree` are consistently safer than `star`
