@@ -21,6 +21,7 @@ class MockModelClient(ModelClient):
         task: BenchmarkTask,
         agent_id: str,
         visible_messages: list[str],
+        enable_reasoning: bool,
         seed: int,
     ) -> GenerationResult:
         agent_index = int(agent_id.split("_")[-1])
@@ -54,7 +55,8 @@ class MockModelClient(ModelClient):
         base_accuracy = model_quality + family_bias + agent_bias - difficulty_score * 0.28
         support_bonus = min(correct_support * 0.12 + rich_messages * 0.05, 0.35)
         support_penalty = min(incorrect_support * 0.11, 0.33)
-        effective_accuracy = max(0.05, min(0.95, base_accuracy + support_bonus - support_penalty))
+        reasoning_bonus = 0.05 if enable_reasoning else 0.0
+        effective_accuracy = max(0.05, min(0.95, base_accuracy + support_bonus + reasoning_bonus - support_penalty))
 
         if rng.random() < effective_accuracy:
             answer = task.gold_answer
@@ -73,8 +75,20 @@ class MockModelClient(ModelClient):
             f"CONFIDENCE: {confidence:.2f}\n"
             f"RATIONALE: {rationale}"
         )
+        if enable_reasoning:
+            raw_text = (
+                "<think>\n"
+                f"Compare local evidence with {len(visible_messages)} peer messages, then keep only evidence-consistent options.\n"
+                "</think>\n"
+                f"{raw_text}"
+            )
         prompt_tokens = estimate_text_tokens(
-            render_decision_prompt(task=task, agent_id=agent_id, visible_messages=visible_messages)
+            render_decision_prompt(
+                task=task,
+                agent_id=agent_id,
+                visible_messages=visible_messages,
+                enable_reasoning=enable_reasoning,
+            )
         )
         completion_tokens = estimate_text_tokens(raw_text)
         return GenerationResult(
@@ -119,8 +133,12 @@ def _model_quality(model_id: str) -> float:
         return 0.67
     if "minimax-m2.7" in normalized:
         return 0.64
+    if "gemma-4-31b-it" in normalized:
+        return 0.66
     if "gemini-3.1-flash-lite" in normalized:
         return 0.6
+    if "glm-5v-turbo" in normalized:
+        return 0.68
     if "glm-5" in normalized:
         return 0.57
     return 0.54

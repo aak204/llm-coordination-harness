@@ -1,139 +1,161 @@
-# Llm coordination harness
+# LLM Coordination Harness
 
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](./pyproject.toml)
-[![Stage](https://img.shields.io/badge/stage-clean%20%2B%20stress-darkgreen.svg)](./docs/CLAIM.md)
 [![Mode](https://img.shields.io/badge/openrouter-research_strict-black.svg)](./docs/RUNBOOK.md)
-[![Result](https://img.shields.io/badge/result-honest%20negative%20%2F%20methods-orange.svg)](./docs/TECHNICAL_REPORT_DRAFT.md)
-[![Status](https://img.shields.io/badge/release-freeze-lightgrey.svg)](./configs/RELEASE_FREEZE.json)
+[![Status](https://img.shields.io/badge/status-v1.0.0--rc-darkgreen.svg)](./docs/V1.0.0_RELEASE_NOTES.md)
+[![Position](https://img.shields.io/badge/position-measurement--first-orange.svg)](./docs/V1.0.0_RELEASE_NOTES.md)
 
-`llm-coordination-harness` is a reproducible measurement rig for hidden coordination variables in multi-agent LLM systems under fixed billed-token budgets.
+`llm-coordination-harness` is a reproducible research rig for measuring vulnerability in multi-agent LLM systems under fixed billed-token budgets.
 
-This repository is intentionally positioned as:
+![Release Hero](./docs/figures/release_hero_v1.gif)
 
-- an eval / harness project
-- a measurement-first research artifact
-- a negative-results / methods result
+## 10-Second Read
 
-This repository is not positioned as:
+- `linear_chain` and `balanced_tree` are consistently safer than `star`
+- prompt-level reasoning does not rescue `star`
+- a clean-metrics predictor fits seen models well, transfers moderately to `GPT-5.x`, and fails hard on `Gemini 3.1 Pro`
+
+The repo is intentionally positioned as:
+
+- an eval / measurement artifact
+- a topology-and-communication research harness
+- a methods project with honest negative and mixed-transfer results
+
+It is not positioned as:
 
 - a generic swarm framework
-- a production routing layer
-- a claim that a universal coordination law has already been proved
+- a production orchestration layer
+- proof that a universal coordination law has already been established
 
 ## What It Measures
 
-The harness extracts and logs:
+The harness extracts and logs four clean coordination variables:
 
 - `F`: critical-fact survival fidelity through the graph
 - `rho`: shared-error correlation under no communication
 - `B`: propagation balance over edge fact-survival ratios
 - `C`: fan-in pressure from incoming peer-token load vs quota
 
-The important property is that these variables are recomputed from logs offline, rather than living only in process memory.
+Stress runs add:
 
-## Golden Artifacts
+- `infection_spread_rate`
+- `attack_success_rate`
+- `quarantine_strength`
+- matched clean-vs-stress deltas such as `F_delta_vs_clean`
 
-The `outputs/` directory is intentionally frozen to the two gold runs:
+The important property is that these variables are recomputed from artifacts offline rather than existing only in memory.
 
-- [p0a-calibrated-full-live](./outputs/p0a-calibrated-full-live)
-- [p0b-attacks-live](./outputs/p0b-attacks-live)
+## Current State
 
-Frozen configs:
+The repository has progressed from early clean/stress calibration to a `v1.0.0 RC` vulnerability-prediction workflow.
 
-- [p0a_calibrated_full_live.yaml](./configs/p0a_calibrated_full_live.yaml)
-- [p0b_attacks_live.yaml](./configs/p0b_attacks_live.yaml)
-- [RELEASE_FREEZE.json](./configs/RELEASE_FREEZE.json)
+Milestone documents:
 
-## Visuals
+- [V0.3.0_DRAFT.md](./docs/V0.3.0_DRAFT.md)
+- [V0.4.0_DRAFT.md](./docs/V0.4.0_DRAFT.md)
+- [V1.0.0_RELEASE_NOTES.md](./docs/V1.0.0_RELEASE_NOTES.md)
 
-Feature importance from the offline predictor analysis:
+Latest result in one sentence:
 
-![Feature Importance](./docs/figures/feature_importance_help_vs_rest.png)
-
-Topology penalty on `MA-FT` at budget `96`:
-
-![Topology Penalty](./docs/figures/topology_penalty_budget96_maft.png)
-
-Topology delta (`Balanced Tree - Star`) on `MA-FT` at budget `96`:
-
-![Topology Delta](./docs/figures/topology_delta_budget96_maft.png)
-
-Held-out predictor AUROC after excluding `budget == 0` from training:
-
-![Predictor Holdout AUROC](./docs/figures/predictor_holdout_auroc_nonzero.png)
-
-P0b attack score delta vs clean baseline:
-
-![Attack Score Delta](./docs/figures/attack_score_delta_vs_clean.png)
-
-P0b infection spread:
-
-![Attack Infection Spread](./docs/figures/attack_infection_spread.png)
-
-P0b attack success rate:
-
-![Attack Success Rate](./docs/figures/attack_success_rate.png)
+topology still dominates, reasoning does not rescue `Star`, and a clean-metrics predictor works well in-distribution but is not yet universal on frontier models.
 
 ## Headline Results
 
-### Clean Phase (P0a)
+### Topology Zoo (`v0.3.0`)
 
-The calibrated clean run is here:
+Primary artifacts:
 
-- [batch_index.json](./outputs/p0a-calibrated-full-live/batch_index.json)
-- [gate_report.json](./outputs/p0a-calibrated-full-live/gate_report.json)
-- [predictor_analysis.json](./outputs/p0a-calibrated-full-live/predictor_analysis.json)
-
-Main outcome:
-
-- topology-sensitive coordination failures are real
-- repaired `F` and `B` move with those failures
-- the current v1 held-out predictor still does **not** pass the clean gate
-
-This is a valid scientific result.
-
-### Stress Phase (P0b)
-
-The attack run is here:
-
-- [batch_index.json](./outputs/p0b-attacks-live/batch_index.json)
+- [p0a-topologies-control-live](./outputs/p0a-topologies-control-live)
+- [p0b-stress-topologies-live](./outputs/p0b-stress-topologies-live)
+- [attack_analysis_report.json](./outputs/p0b-stress-topologies-live/attack_analysis_report.json)
 
 Main outcome:
 
-- attack spread is measurable
-- star can behave as a zero-quarantine topology
-- structures that degrade useful coordination may also weakly attenuate malicious propagation
+- `linear_chain` is the safest topology in the current rooted-fusion harness
+- `balanced_tree` is better than `star`
+- `complete_graph` collapses toward star-like behavior under this protocol
+- the strong version of "natural quarantine by degradation" is not supported
 
-This is mechanistically interesting, but still not enough to claim a general attack-robustness law.
+### Reasoning And Model Sweeps (`v0.4.0`)
 
-## Why This Repo Matters
+Primary artifacts:
 
-The core question is:
+- [v0-4-0-ablation-sweep](./outputs/v0-4-0-ablation-sweep)
+- [v0-4-0-gemma-scale](./outputs/v0-4-0-gemma-scale)
+- [v0-4-0-boss-fight](./outputs/v0-4-0-boss-fight)
+- [V0.4.0_DRAFT.md](./docs/V0.4.0_DRAFT.md)
 
-At fixed orchestration and fixed billed budget, do `F`, `rho`, `B`, `C` explain transitions between:
+Main outcome:
 
-- `help`
-- `saturation`
-- `collapse`
+- prompt-level reasoning does not fix the structural weakness of `Star`
+- `Gemma 4` is strong on robust topologies, especially `linear_chain`
+- `GLM 5V Turbo` is not a decisive robustness breakthrough on `Star`
+- `Qwen` without reasoning remains one of the strongest `Star` baselines in this repo
 
-better than heuristic predictors that mostly exploit size and token-count shortcuts?
+### Vulnerability Predictor (`v1.0.0 RC`)
 
-The current answer is nuanced:
+Primary artifacts:
 
-- the measurement system works
-- the hidden coordination variables are real and mechanistically meaningful
-- the predictor still fails the intended clean gate
+- [vulnerability_predictor_report.json](./outputs/v1-0-0-vulnerability-predictor/vulnerability_predictor_report.json)
+- [vulnerability_predictor.cbm](./outputs/v1-0-0-vulnerability-predictor/vulnerability_predictor.cbm)
+- [V1.0.0_RELEASE_NOTES.md](./docs/V1.0.0_RELEASE_NOTES.md)
 
-That combination of positive measurement result and negative claim result is exactly the kind of outcome this repo is meant to preserve.
+Main outcome:
+
+- `CatBoostRegressor` predicts `infection_spread_rate` from clean metrics with train MAE `0.011333`
+- feature importance is dominated by `C`, then `B`, then `enable_reasoning`, then `F`
+- frontier transfer is mixed:
+  - `GPT-5.4` OOD MAE: `0.11304`
+  - `GPT-5.1` OOD MAE: `0.120872`
+  - `Gemini 3.1 Pro Preview` OOD MAE: `0.506112`
+
+This is a useful predictor prototype, but not a universal law yet.
+
+## Visuals
+
+Release hero:
+
+![Release Hero Static](./docs/figures/release_hero_v1.png)
+
+Reasoning ablation on `Star`:
+
+![Reasoning Star Ablation](./docs/figures/v0_4_reasoning_star_ablation.png)
+
+Predictor train-vs-frontier transfer gap:
+
+![Frontier Transfer Gap](./docs/figures/v1_frontier_transfer_gap.png)
+
+Leaf-attack topology comparison:
+
+![Leaf Topology Bar](./docs/figures/attack_leaf_topology_bar.png)
+
+Balanced tree leaf vs middle-manager attack:
+
+![Balanced Tree Heatmap](./docs/figures/attack_balanced_tree_leaf_vs_manager_heatmap.png)
+
+Useful-fact loss vs infection spread:
+
+![F Delta vs Infection](./docs/figures/attack_f_delta_vs_infection_scatter.png)
+
+Legacy clean predictor hold-out figure:
+
+![Predictor Holdout AUROC](./docs/figures/predictor_holdout_auroc_nonzero.png)
+
+## Research Position
+
+The strongest supported claims right now are:
+
+- topology matters more than simply choosing a stronger model
+- `C` is the dominant empirical vulnerability feature in the current dataset
+- frontier models can deviate sharply from in-distribution expectations
+
+The strongest unsupported claim is:
+
+- that a model-agnostic universal vulnerability law has already been proved
 
 ## OpenRouter Discipline
 
-Two modes exist:
-
-- `research_strict`
-- `dev_convenience`
-
-Research runs require:
+Research runs use `research_strict`:
 
 - exact model pinning
 - explicit provider pinning
@@ -141,10 +163,34 @@ Research runs require:
 - no provider fallback
 - route / pricing / snapshot logging
 
-## Where To Start
+## Repository Map
 
-- [CLAIM.md](./docs/CLAIM.md)
+Core code:
+
+- [src/coord_harness/core](./src/coord_harness/core)
+- [src/coord_harness/attacks](./src/coord_harness/attacks)
+- [src/coord_harness/runner](./src/coord_harness/runner)
+- [src/coord_harness/evaluation](./src/coord_harness/evaluation)
+- [src/coord_harness/analysis](./src/coord_harness/analysis)
+
+Configs:
+
+- [configs](./configs)
+
+Docs:
+
 - [BENCH_SPEC.md](./docs/BENCH_SPEC.md)
 - [LOG_SCHEMA.md](./docs/LOG_SCHEMA.md)
 - [RUNBOOK.md](./docs/RUNBOOK.md)
-- [TECHNICAL_REPORT_DRAFT.md](./docs/TECHNICAL_REPORT_DRAFT.md)
+- [V0.3.0_DRAFT.md](./docs/V0.3.0_DRAFT.md)
+- [V0.4.0_DRAFT.md](./docs/V0.4.0_DRAFT.md)
+- [V1.0.0_RELEASE_NOTES.md](./docs/V1.0.0_RELEASE_NOTES.md)
+
+## Where To Start
+
+If you want the shortest path through the repo:
+
+1. Read [V1.0.0_RELEASE_NOTES.md](./docs/V1.0.0_RELEASE_NOTES.md)
+2. Read [RUNBOOK.md](./docs/RUNBOOK.md)
+3. Inspect [vulnerability_predictor_report.json](./outputs/v1-0-0-vulnerability-predictor/vulnerability_predictor_report.json)
+4. Inspect the topology/stress artifacts in [outputs](./outputs)

@@ -14,6 +14,7 @@ class ModelClient(ABC):
         task: BenchmarkTask,
         agent_id: str,
         visible_messages: list[str],
+        enable_reasoning: bool,
         seed: int,
     ) -> GenerationResult:
         raise NotImplementedError

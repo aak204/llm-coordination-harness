@@ -1,0 +1,56 @@
+run:
+  experiment_id: v0-5-0-frontier-predict-stress
+  framework_id: coord_harness_v1
+  stage: stress
+  mode: research_strict
+  description: Frontier stress hold-out for zero-shot vulnerability prediction with GPT-5.1.
+  output_root: outputs
+  agent_count: 9
+  total_billed_token_budget: 14000
+  max_concurrency: 4
+  capture_model_catalog_snapshot: true
+  enable_reasoning: false
+  attack:
+    enabled: true
+    injection_depth: leaf
+    payload_type: hard_hallucination
+    target_answer_policy: first_wrong_option
+    compromise_confidence: 0.99
+    propagate_instruction: true
+    only_baselines: [ma_ft]
+    clean_reference_experiment_dir: outputs/v0-5-0-frontier-predict
+
+benchmarks:
+  - family: craft_mini
+    stage: clean
+    split: v050_frontier
+    task_limit: 4
+  - family: agentsnet_mini
+    stage: clean
+    split: v050_frontier
+    task_limit: 4
+
+model_panel:
+  - alias: gpt51
+    provider: openrouter
+    model_id: openai/gpt-5.1
+    panel_tier: confirmatory
+    temperature: 0.0
+    top_p: 1.0
+    max_completion_tokens: 128
+    allow_auto_routing: false
+    reasoning:
+      effort: none
+      exclude: true
+    routing:
+      only: [openai/default]
+      allow_fallbacks: false
+
+sweep:
+  benchmark_families: [craft_mini, agentsnet_mini]
+  topology_presets: [star, linear_chain]
+  message_token_budgets: [96]
+  model_aliases: [gpt51]
+  model_tiers: []
+  baselines: [ma_ft]
+  seeds: [7]

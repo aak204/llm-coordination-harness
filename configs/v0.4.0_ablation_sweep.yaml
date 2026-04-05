@@ -1,0 +1,73 @@
+run:
+  experiment_id: v0-4-0-ablation-sweep
+  framework_id: coord_harness_v1
+  stage: stress
+  mode: research_strict
+  description: Reasoning ablation on Star under attack for Gemini and Qwen at budget 96.
+  output_root: outputs
+  agent_count: 9
+  total_billed_token_budget: 25000
+  max_concurrency: 25
+  capture_model_catalog_snapshot: true
+  enable_reasoning: false
+  regime_thresholds:
+    help_min_lift: 0.05
+    collapse_max_lift: -0.05
+  attack:
+    enabled: true
+    injection_depth: leaf
+    payload_type: hard_hallucination
+    target_answer_policy: first_wrong_option
+    compromise_confidence: 0.99
+    propagate_instruction: true
+    only_baselines: [ma_ft]
+
+benchmarks:
+  - family: craft_mini
+    stage: clean
+    split: v040_ablation
+    task_limit: 4
+  - family: agentsnet_mini
+    stage: clean
+    split: v040_ablation
+    task_limit: 4
+
+model_panel:
+  - alias: gemini31_flash_lite_preview
+    provider: openrouter
+    model_id: google/gemini-3.1-flash-lite-preview
+    panel_tier: confirmatory
+    temperature: 0.0
+    top_p: 1.0
+    max_completion_tokens: 256
+    allow_auto_routing: false
+    reasoning:
+      effort: none
+      exclude: true
+    routing:
+      only: [google-ai-studio]
+      allow_fallbacks: false
+  - alias: qwen35_plus_0215
+    provider: openrouter
+    model_id: qwen/qwen3.5-plus-02-15
+    panel_tier: sweep
+    temperature: 0.0
+    top_p: 1.0
+    max_completion_tokens: 256
+    allow_auto_routing: false
+    reasoning:
+      effort: none
+      exclude: true
+    routing:
+      only: [alibaba]
+      allow_fallbacks: false
+
+sweep:
+  benchmark_families: [craft_mini, agentsnet_mini]
+  topology_presets: [star]
+  message_token_budgets: [96]
+  model_aliases: [gemini31_flash_lite_preview, qwen35_plus_0215]
+  model_tiers: []
+  baselines: [ma_ft]
+  seeds: [7, 11]
+  enable_reasoning_values: [false, true]

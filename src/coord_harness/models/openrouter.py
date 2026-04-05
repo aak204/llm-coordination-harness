@@ -13,7 +13,7 @@ import httpx
 
 from coord_harness.config.models import ModelSpec
 from coord_harness.core.budget import estimate_text_tokens
-from coord_harness.core.protocols import render_decision_prompt
+from coord_harness.core.protocols import render_decision_prompt, sanitize_public_rationale, strip_reasoning_blocks
 from coord_harness.core.types import BenchmarkTask, GenerationResult
 from coord_harness.models.base import ModelClient
 
@@ -70,7 +70,24 @@ class OpenRouterClient(ModelClient):
             payload["require_parameters"] = True
         return payload
 
-    def _reasoning_payload(self) -> dict[str, Any] | None:
+    @staticmethod
+    def _content_text(content: Any) -> str | None:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    text = item.get("text")
+                    if isinstance(text, str):
+                        parts.append(text)
+            joined = "".join(parts).strip()
+            return joined or None
+        return None
+
+    def _reasoning_payload(self, *, enable_reasoning: bool) -> dict[str, Any] | None:
         reasoning = self.model_spec.reasoning
         payload: dict[str, Any] = {}
         if reasoning.enabled is not None:
@@ -81,6 +98,8 @@ class OpenRouterClient(ModelClient):
             payload["max_tokens"] = reasoning.max_tokens
         if reasoning.exclude:
             payload["exclude"] = True
+        if not enable_reasoning and payload.get("enabled") is True:
+            payload["enabled"] = False
         return payload or None
 
     def _snapshot_hash(self, payload: dict | list) -> str:
@@ -182,11 +201,17 @@ class OpenRouterClient(ModelClient):
         task: BenchmarkTask,
         agent_id: str,
         visible_messages: list[str],
+        enable_reasoning: bool,
         seed: int,
     ) -> GenerationResult:
         self._ensure_catalog_snapshot()
         self._ensure_endpoints_snapshot()
-        prompt = render_decision_prompt(task=task, agent_id=agent_id, visible_messages=visible_messages)
+        prompt = render_decision_prompt(
+            task=task,
+            agent_id=agent_id,
+            visible_messages=visible_messages,
+            enable_reasoning=enable_reasoning,
+        )
         request_payload = {
             "model": self.model_spec.model_id,
             "messages": [{"role": "user", "content": prompt}],
@@ -198,7 +223,7 @@ class OpenRouterClient(ModelClient):
             "stream": False,
             "usage": {"include": True},
         }
-        reasoning_payload = self._reasoning_payload()
+        reasoning_payload = self._reasoning_payload(enable_reasoning=enable_reasoning)
         if reasoning_payload is not None:
             request_payload["reasoning"] = reasoning_payload
         response_payload: dict[str, Any] | None = None
@@ -209,7 +234,15 @@ class OpenRouterClient(ModelClient):
                 response = self._client.post("/chat/completions", json=request_payload)
                 response.raise_for_status()
                 response_payload = response.json()
-                content = response_payload["choices"][0]["message"]["content"]
+                if "error" in response_payload:
+                    raise ValueError(f"OpenRouter returned error payload: {response_payload['error']}")
+                choices = response_payload.get("choices")
+                if not isinstance(choices, list) or not choices:
+                    raise ValueError("OpenRouter returned payload without choices.")
+                message = choices[0].get("message")
+                if not isinstance(message, dict):
+                    raise ValueError("OpenRouter returned payload without a message object.")
+                content = self._content_text(message.get("content"))
                 if content is None:
                     raise ValueError("OpenRouter returned null content.")
                 break
@@ -234,9 +267,10 @@ class OpenRouterClient(ModelClient):
             if last_error:
                 raise last_error
             raise RuntimeError("OpenRouter completion failed without a captured error.")
-        answer_match = ANSWER_RE.search(content)
-        confidence_match = CONFIDENCE_RE.search(content)
-        rationale_match = RATIONALE_RE.search(content)
+        public_content = strip_reasoning_blocks(content)
+        answer_match = ANSWER_RE.search(public_content)
+        confidence_match = CONFIDENCE_RE.search(public_content)
+        rationale_match = RATIONALE_RE.search(public_content)
 
         resolved_provider_name = response_payload.get("provider")
         endpoint = self._resolve_provider_endpoint(resolved_provider_name)
@@ -250,7 +284,7 @@ class OpenRouterClient(ModelClient):
                 max(0.0, min(float(confidence_match.group("confidence")), 1.0)) if confidence_match else 0.5,
                 2,
             ),
-            rationale=rationale_match.group("rationale").strip() if rationale_match else "No rationale returned.",
+            rationale=sanitize_public_rationale(rationale_match.group("rationale")) if rationale_match else "No rationale returned.",
             raw_text=content,
             prompt_tokens=int(usage.get("prompt_tokens", estimate_text_tokens(prompt))),
             completion_tokens=int(usage.get("completion_tokens", estimate_text_tokens(content))),
@@ -287,7 +321,7 @@ class OpenRouterClient(ModelClient):
         return {
             "requested_model_id": self.model_spec.model_id,
             "requested_provider_policy": self._provider_payload(),
-            "requested_reasoning_policy": self._reasoning_payload(),
+            "requested_reasoning_policy": self._reasoning_payload(enable_reasoning=False),
             "catalog_pricing": self._model_catalog_entry.get("pricing") if self._model_catalog_entry else None,
             "catalog_created": self._model_catalog_entry.get("created") if self._model_catalog_entry else None,
             "catalog_snapshot_hash": self._catalog_snapshot_hash,

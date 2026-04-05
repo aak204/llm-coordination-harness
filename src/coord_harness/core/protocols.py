@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 
 from coord_harness.core.budget import estimate_text_tokens, truncate_to_token_limit
 from coord_harness.core.types import BenchmarkTask
 
 
-DECISION_PROMPT_TEMPLATE_VERSION = "decision-v2"
-MESSAGE_SERIALIZER_VERSION = "message-v2"
+DECISION_PROMPT_TEMPLATE_VERSION = "decision-v3"
+MESSAGE_SERIALIZER_VERSION = "message-v3"
 SA_STAR_FUSION_SERIALIZER_VERSION = "sa-star-fusion-v1"
+
+THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
 
 DECISION_PROMPT_TEMPLATE = """You are {agent_id} in a frozen research harness.
 You must choose the single best answer option for the task.
@@ -27,10 +30,23 @@ Task:
 Allowed answers: {choices}
 
 Reply in exactly this format:
+{format_block}
+"""
+
+REASONING_DISABLED_FORMAT_BLOCK = """ANSWER: <option>
+CONFIDENCE: <0.00-1.00>
+RATIONALE: <one short sentence grounded in the task or peer evidence>"""
+
+REASONING_ENABLED_FORMAT_BLOCK = """<think>
+You MUST output this block before the final answer.
+Write your own short reasoning grounded in local evidence and peer evidence.
+Do not copy these instructions.
+Do not use the tokens ANSWER:, CONFIDENCE:, or RATIONALE: inside this block.
+</think>
 ANSWER: <option>
 CONFIDENCE: <0.00-1.00>
 RATIONALE: <one short sentence grounded in the task or peer evidence>
-"""
+Keep the <think> block concise and place the final ANSWER/CONFIDENCE/RATIONALE outside it."""
 
 
 def decision_prompt_hash() -> str:
@@ -59,7 +75,23 @@ class SerializedPeerMessage:
     includes_rationale: bool
 
 
-def render_decision_prompt(*, task: BenchmarkTask, agent_id: str, visible_messages: list[str]) -> str:
+def strip_reasoning_blocks(text: str) -> str:
+    return THINK_BLOCK_RE.sub("", text).strip()
+
+
+def sanitize_public_rationale(rationale: str) -> str:
+    cleaned = strip_reasoning_blocks(rationale)
+    collapsed = " ".join(cleaned.split())
+    return collapsed.strip()
+
+
+def render_decision_prompt(
+    *,
+    task: BenchmarkTask,
+    agent_id: str,
+    visible_messages: list[str],
+    enable_reasoning: bool = False,
+) -> str:
     visible_messages_block = "\n".join(f"- {message}" for message in visible_messages) if visible_messages else "- none"
     local_evidence = get_agent_local_evidence(task=task, agent_id=agent_id)
     local_evidence_block = local_evidence or "- none"
@@ -69,6 +101,7 @@ def render_decision_prompt(*, task: BenchmarkTask, agent_id: str, visible_messag
         visible_messages_block=visible_messages_block,
         task_prompt=task.prompt,
         choices=", ".join(task.answer_choices),
+        format_block=REASONING_ENABLED_FORMAT_BLOCK if enable_reasoning else REASONING_DISABLED_FORMAT_BLOCK,
     )
 
 
@@ -117,11 +150,12 @@ def serialize_peer_message(
     rationale: str,
     message_token_budget: int,
 ) -> SerializedPeerMessage:
+    public_rationale = sanitize_public_rationale(rationale)
     if message_token_budget <= 32:
         raw_payload = f"ANSWER={answer};CONFIDENCE={confidence:.2f}"
         includes_rationale = False
     else:
-        raw_payload = f"ANSWER={answer};CONFIDENCE={confidence:.2f};RATIONALE={rationale}"
+        raw_payload = f"ANSWER={answer};CONFIDENCE={confidence:.2f};RATIONALE={public_rationale}"
         includes_rationale = True
     raw_token_count = estimate_text_tokens(raw_payload)
     used_content = truncate_to_token_limit(raw_payload, message_token_budget)

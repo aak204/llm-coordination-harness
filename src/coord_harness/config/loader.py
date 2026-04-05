@@ -30,11 +30,13 @@ class TrialConfig:
     config_digest: str
     config_path: Path
     attack: dict
+    enable_reasoning: bool = False
     attack_scenario_name: str | None = None
 
     @property
     def trial_id(self) -> str:
         attack_suffix = f"__atk{self.attack_scenario_name}" if self.attack_scenario_name else ""
+        reasoning_suffix = "__reasoning-on" if self.enable_reasoning else ""
         return (
             f"{self.experiment_id}"
             f"__{self.benchmark_family.value}"
@@ -42,6 +44,7 @@ class TrialConfig:
             f"__msg{self.message_token_budget}"
             f"__{self.model_spec.alias}"
             f"__{self.baseline.value}"
+            f"{reasoning_suffix}"
             f"{attack_suffix}"
             f"__seed{self.seed}"
         )
@@ -85,40 +88,43 @@ def expand_trials(config: BatchConfig, config_digest: str, config_path: str | Pa
     path = Path(config_path)
     scenario_entries = config.sweep.attack_scenarios if config.run.stage is RunStage.STRESS and config.sweep.attack_scenarios else [None]
     base_attack = config.run.attack.model_dump(mode="json")
+    reasoning_values = config.sweep.enable_reasoning_values if config.sweep.enable_reasoning_values else [config.run.enable_reasoning]
     for family in config.sweep.benchmark_families:
         for topology in config.sweep.topology_presets:
             for message_budget in config.sweep.message_token_budgets:
                 for alias in config.selected_model_aliases():
                     model_spec = config.model_spec_for(alias)
-                    for baseline in config.sweep.baselines:
-                        for seed in config.sweep.seeds:
-                            for scenario in scenario_entries:
-                                if scenario is not None and not _scenario_applies(
-                                    scenario=scenario,
-                                    topology=topology,
-                                    baseline=baseline,
-                                ):
-                                    continue
-                                trials.append(
-                                    TrialConfig(
-                                        experiment_id=config.run.experiment_id,
-                                        framework_id=config.run.framework_id,
-                                        stage=config.run.stage,
-                                        benchmark_family=family,
-                                        topology_preset=topology,
-                                        message_token_budget=message_budget,
-                                        model_spec=model_spec,
+                    for enable_reasoning in reasoning_values:
+                        for baseline in config.sweep.baselines:
+                            for seed in config.sweep.seeds:
+                                for scenario in scenario_entries:
+                                    if scenario is not None and not _scenario_applies(
+                                        scenario=scenario,
+                                        topology=topology,
                                         baseline=baseline,
-                                        seed=seed,
-                                        agent_count=config.run.agent_count,
-                                        total_billed_token_budget=config.run.total_billed_token_budget,
-                                        output_root=config.run.output_root,
-                                        config_digest=config_digest,
-                                        config_path=path,
-                                        attack=_merged_attack_payload(base_attack, scenario),
-                                        attack_scenario_name=scenario.name if scenario is not None else None,
+                                    ):
+                                        continue
+                                    trials.append(
+                                        TrialConfig(
+                                            experiment_id=config.run.experiment_id,
+                                            framework_id=config.run.framework_id,
+                                            stage=config.run.stage,
+                                            benchmark_family=family,
+                                            topology_preset=topology,
+                                            message_token_budget=message_budget,
+                                            model_spec=model_spec,
+                                            baseline=baseline,
+                                            seed=seed,
+                                            agent_count=config.run.agent_count,
+                                            total_billed_token_budget=config.run.total_billed_token_budget,
+                                            output_root=config.run.output_root,
+                                            config_digest=config_digest,
+                                            config_path=path,
+                                            attack=_merged_attack_payload(base_attack, scenario),
+                                            enable_reasoning=enable_reasoning,
+                                            attack_scenario_name=scenario.name if scenario is not None else None,
+                                        )
                                     )
-                                )
     return trials
 
 

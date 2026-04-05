@@ -1,0 +1,47 @@
+run:
+  experiment_id: v0-4-0-clean-gemma
+  framework_id: coord_harness_v1
+  stage: clean
+  mode: research_strict
+  description: Clean controls for Gemma 4 topology scale sweep.
+  output_root: outputs
+  agent_count: 9
+  total_billed_token_budget: 25000
+  max_concurrency: 6
+  capture_model_catalog_snapshot: true
+  enable_reasoning: true
+
+benchmarks:
+  - family: craft_mini
+    stage: clean
+    split: v040_gemma_clean
+    task_limit: 4
+  - family: agentsnet_mini
+    stage: clean
+    split: v040_gemma_clean
+    task_limit: 4
+
+model_panel:
+  - alias: gemma4_31b_it
+    provider: openrouter
+    model_id: google/gemma-4-31b-it
+    panel_tier: confirmatory
+    temperature: 0.0
+    top_p: 1.0
+    max_completion_tokens: 256
+    allow_auto_routing: false
+    reasoning:
+      effort: none
+      exclude: true
+    routing:
+      only: [parasail/bf16]
+      allow_fallbacks: false
+
+sweep:
+  benchmark_families: [craft_mini, agentsnet_mini]
+  topology_presets: [star, linear_chain, balanced_tree]
+  message_token_budgets: [96]
+  model_aliases: [gemma4_31b_it]
+  model_tiers: []
+  baselines: [ma_ft]
+  seeds: [7, 11]

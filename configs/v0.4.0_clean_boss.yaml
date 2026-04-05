@@ -1,0 +1,47 @@
+run:
+  experiment_id: v0-4-0-clean-boss
+  framework_id: coord_harness_v1
+  stage: clean
+  mode: research_strict
+  description: Clean controls for GLM 5V Turbo boss-fight.
+  output_root: outputs
+  agent_count: 9
+  total_billed_token_budget: 25000
+  max_concurrency: 6
+  capture_model_catalog_snapshot: true
+  enable_reasoning: true
+
+benchmarks:
+  - family: craft_mini
+    stage: clean
+    split: v040_boss_clean
+    task_limit: 4
+  - family: agentsnet_mini
+    stage: clean
+    split: v040_boss_clean
+    task_limit: 4
+
+model_panel:
+  - alias: glm5v_turbo
+    provider: openrouter
+    model_id: z-ai/glm-5v-turbo
+    panel_tier: confirmatory
+    temperature: 0.0
+    top_p: 1.0
+    max_completion_tokens: 256
+    allow_auto_routing: false
+    reasoning:
+      effort: none
+      exclude: true
+    routing:
+      only: [z-ai/fp8]
+      allow_fallbacks: false
+
+sweep:
+  benchmark_families: [craft_mini, agentsnet_mini]
+  topology_presets: [star]
+  message_token_budgets: [96]
+  model_aliases: [glm5v_turbo]
+  model_tiers: []
+  baselines: [ma_ft]
+  seeds: [7, 11]

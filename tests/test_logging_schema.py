@@ -23,6 +23,7 @@ def test_trial_summary_roundtrip() -> None:
             stage="clean",
             mode="research_strict",
             baseline="ma_ft",
+            enable_reasoning=True,
             attack_scenario=None,
             attack_injection_depth=None,
             seed=7,
@@ -112,3 +113,4 @@ def test_trial_summary_roundtrip() -> None:
     )
     restored = TrialSummary.model_validate_json(summary.model_dump_json())
     assert restored.outcomes.regime is RegimeLabel.HELP
+    assert restored.run.enable_reasoning is True

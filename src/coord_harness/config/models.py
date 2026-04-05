@@ -153,6 +153,7 @@ class RunMetadataConfig(BaseModel):
     total_billed_token_budget: int = 4096
     max_concurrency: int = 25
     capture_model_catalog_snapshot: bool = False
+    enable_reasoning: bool = False
     notes: dict[str, str] = Field(default_factory=dict)
     regime_thresholds: RegimeThresholds = Field(default_factory=RegimeThresholds)
     attack: AttackConfig = Field(default_factory=AttackConfig)
@@ -189,6 +190,7 @@ class SweepConfig(BaseModel):
     model_tiers: list[PanelTier] = Field(default_factory=list)
     baselines: list[BaselineStrategy]
     seeds: list[int]
+    enable_reasoning_values: list[bool] = Field(default_factory=list)
     attack_scenarios: list[AttackScenarioConfig] = Field(default_factory=list)
 
     @field_validator("message_token_budgets")
@@ -205,6 +207,8 @@ class SweepConfig(BaseModel):
     def validate_model_selection(self) -> "SweepConfig":
         if not self.model_aliases and not self.model_tiers:
             raise ValueError("Sweep must select models via model_aliases or model_tiers.")
+        if self.enable_reasoning_values and len(self.enable_reasoning_values) != len(set(self.enable_reasoning_values)):
+            raise ValueError("enable_reasoning_values must not contain duplicates.")
         scenario_names = [scenario.name for scenario in self.attack_scenarios]
         if len(scenario_names) != len(set(scenario_names)):
             raise ValueError(f"attack_scenarios must have unique names; got duplicates in {scenario_names}")

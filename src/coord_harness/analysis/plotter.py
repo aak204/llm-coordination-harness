@@ -6,6 +6,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from PIL import Image
 
 from coord_harness.analysis.attack_analysis import write_attack_analysis
 
@@ -55,6 +56,8 @@ def _short_model_name(alias: str) -> str:
     return {
         "qwen35_plus_0215": "Qwen",
         "gemini31_flash_lite_preview": "Gemini",
+        "gemma4_31b_it": "Gemma 4",
+        "glm5v_turbo": "GLM 5V",
     }.get(alias, alias)
 
 
@@ -69,6 +72,15 @@ def _topology_display_name(preset: str) -> str:
         "linear_chain": "Linear Chain",
         "complete_graph": "Complete Graph",
     }.get(preset, preset)
+
+
+def _load_batch_rows(experiment_dir: Path) -> list[dict]:
+    batch = _load_json(experiment_dir / "batch_index.json")
+    rows = []
+    for entry in batch["trials"]:
+        summary = _load_json(Path(entry["summary_path"]))
+        rows.append({"entry": entry, "summary": summary})
+    return rows
 
 
 def _plot_feature_importance(experiment_dir: Path, output_dir: Path) -> None:
@@ -236,6 +248,7 @@ def _stress_rows(stress_dir: Path, clean_dir: Path) -> list[dict]:
             entry["topology_preset"],
             entry["message_token_budget"],
             entry["model_alias"],
+            entry.get("enable_reasoning", False),
             entry["baseline"],
             entry.get("attack_scenario"),
             entry["seed"],
@@ -250,6 +263,7 @@ def _stress_rows(stress_dir: Path, clean_dir: Path) -> list[dict]:
             entry["topology_preset"],
             entry["message_token_budget"],
             entry["model_alias"],
+            entry.get("enable_reasoning", False),
             entry["baseline"],
             None,
             entry["seed"],
@@ -257,11 +271,13 @@ def _stress_rows(stress_dir: Path, clean_dir: Path) -> list[dict]:
         clean_score = clean_map[key]["score_mean"]
         attack_scenario = entry.get("attack_scenario")
         scenario_suffix = f" / {attack_scenario}" if attack_scenario else ""
+        reasoning_suffix = " / reasoning" if entry.get("enable_reasoning") else ""
         rows.append(
             {
                 "label": (
                     f"{_short_family_name(entry['benchmark_family'])} / "
-                    f"{_short_model_name(entry['model_alias'])} / {entry['baseline']}{scenario_suffix} / seed {entry['seed']}"
+                    f"{_short_model_name(entry['model_alias'])}{reasoning_suffix} / "
+                    f"{entry['baseline']}{scenario_suffix} / seed {entry['seed']}"
                 ),
                 "topology": _topology_display_name(entry["topology_preset"]),
                 "delta_score": entry["score_mean"] - clean_score,
@@ -270,6 +286,7 @@ def _stress_rows(stress_dir: Path, clean_dir: Path) -> list[dict]:
                 "quarantine_strength": summary["outcomes"].get("quarantine_strength") or 0.0,
                 "f_delta": (summary.get("attack_analysis") or {}).get("F_delta_vs_clean"),
                 "attack_scenario": attack_scenario,
+                "enable_reasoning": entry.get("enable_reasoning", False),
             }
         )
     return rows
@@ -491,6 +508,217 @@ def _plot_balanced_tree_leaf_vs_manager(stress_dir: Path, clean_dir: Path, outpu
     _save_figure(fig, output_dir, "attack_balanced_tree_leaf_vs_manager_heatmap")
 
 
+def _plot_reasoning_star_ablation(output_dir: Path) -> None:
+    clean_dir = Path("outputs/v0-4-0-clean-ablation")
+    stress_dir = Path("outputs/v0-4-0-ablation-sweep")
+    if not clean_dir.exists() or not stress_dir.exists():
+        return
+
+    clean_rows = _load_batch_rows(clean_dir)
+    stress_rows = _load_batch_rows(stress_dir)
+    clean_map = {}
+    for row in clean_rows:
+        entry = row["entry"]
+        key = (
+            entry["benchmark_family"],
+            entry["model_alias"],
+            entry["enable_reasoning"],
+            entry["seed"],
+        )
+        clean_map[key] = row["summary"]
+
+    grouped: dict[tuple[str, bool], dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    for row in stress_rows:
+        entry = row["entry"]
+        if entry["topology_preset"] != "star":
+            continue
+        key = (
+            entry["benchmark_family"],
+            entry["model_alias"],
+            entry["enable_reasoning"],
+            entry["seed"],
+        )
+        clean_summary = clean_map[key]
+        grouped[(entry["model_alias"], bool(entry["enable_reasoning"]))]["infection"].append(
+            row["summary"]["outcomes"]["infection_spread_rate"] or 0.0
+        )
+        grouped[(entry["model_alias"], bool(entry["enable_reasoning"]))]["quarantine"].append(
+            row["summary"]["outcomes"]["quarantine_strength"] or 0.0
+        )
+        grouped[(entry["model_alias"], bool(entry["enable_reasoning"]))]["score_delta"].append(
+            row["summary"]["outcomes"]["score_mean"] - clean_summary["outcomes"]["score_mean"]
+        )
+
+    models = ["gemini31_flash_lite_preview", "qwen35_plus_0215"]
+    labels = [_short_model_name(model) for model in models]
+    x = list(range(len(models)))
+    fig, axes = plt.subplots(3, 1, figsize=(9.5, 10), sharex=True)
+    metrics = [
+        ("infection", "Infection Spread", "#C56B46"),
+        ("quarantine", "Quarantine Strength", "#246A73"),
+        ("score_delta", "Stress - Clean Score", "#5B8E7D"),
+    ]
+    for ax, (metric, ylabel, color) in zip(axes, metrics):
+        off_values = [sum(grouped[(model, False)][metric]) / len(grouped[(model, False)][metric]) for model in models]
+        on_values = [sum(grouped[(model, True)][metric]) / len(grouped[(model, True)][metric]) for model in models]
+        bars_off = ax.bar([idx - 0.18 for idx in x], off_values, width=0.35, color="#A7C4BC", label="Reasoning Off")
+        bars_on = ax.bar([idx + 0.18 for idx in x], on_values, width=0.35, color=color, label="Reasoning On")
+        fmt = "{:+.2f}" if metric == "score_delta" else "{:.3f}"
+        _annotate_vertical_bars(ax, bars_off, fmt=fmt, dy=0.01)
+        _annotate_vertical_bars(ax, bars_on, fmt=fmt, dy=0.01)
+        ax.set_ylabel(ylabel)
+        if metric == "infection":
+            ax.legend(loc="upper right")
+    axes[-1].set_xticks(x)
+    axes[-1].set_xticklabels(labels)
+    fig.suptitle("Star Ablation: Reasoning Does Not Rescue Topology (`MA-FT`, budget 96)")
+    fig.text(0.01, 0.005, "Averages over CRAFT + AgentsNet and both seeds; compared against matched clean controls.", fontsize=9)
+    _save_figure(fig, output_dir, "v0_4_reasoning_star_ablation")
+
+
+def _plot_frontier_transfer_gap(output_dir: Path) -> None:
+    predictor_report_path = Path("outputs/v1-0-0-vulnerability-predictor/vulnerability_predictor_report.json")
+    if not predictor_report_path.exists():
+        return
+    predictor_report = _load_json(predictor_report_path)
+    train_mae = predictor_report["train_mae"]
+    comparison_specs = [
+        ("GPT-5.4", Path("outputs/v1-0-0-frontier-gpt54-stress/frontier_prediction_comparison.json")),
+        ("GPT-5.1", Path("outputs/v0-5-0-frontier-predict-stress/frontier_prediction_comparison.json")),
+        ("Gemini 3.1 Pro", Path("outputs/v1-0-0-frontier-gemini31pro-stress/frontier_prediction_comparison.json")),
+    ]
+    labels = ["Train"] + [label for label, path in comparison_specs if path.exists()]
+    values = [train_mae] + [_load_json(path)["frontier_mae"] for label, path in comparison_specs if path.exists()]
+    colors = ["#246A73", "#4D908E", "#577590", "#C56B46"][: len(values)]
+
+    fig, ax = plt.subplots(figsize=(9, 5.8))
+    x = list(range(len(labels)))
+    bars = ax.bar(x, values, color=colors, width=0.58)
+    _annotate_vertical_bars(ax, bars, fmt="{:.3f}", dy=0.01)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("MAE")
+    ax.set_ylim(0, max(values) * 1.18 if values else 1.0)
+    ax.set_title("Predictor Transfer Gap: In-Distribution vs Frontier OOD")
+    fig.text(0.01, 0.005, "Lower is better; GPT-5.x transfers moderately, Gemini 3.1 Pro fails hard.", fontsize=9)
+    _save_figure(fig, output_dir, "v1_frontier_transfer_gap")
+
+
+def _plot_release_hero(output_dir: Path) -> None:
+    predictor_report_path = Path("outputs/v1-0-0-vulnerability-predictor/vulnerability_predictor_report.json")
+    topology_report_path = Path("outputs/p0b-stress-topologies-live/attack_analysis_report.json")
+    ablation_stress_dir = Path("outputs/v0-4-0-ablation-sweep")
+    ablation_clean_dir = Path("outputs/v0-4-0-clean-ablation")
+    if not predictor_report_path.exists() or not topology_report_path.exists() or not ablation_stress_dir.exists() or not ablation_clean_dir.exists():
+        return
+
+    topology_report = _load_json(topology_report_path)
+    predictor_report = _load_json(predictor_report_path)
+
+    leaf_rows = [
+        row
+        for row in topology_report["rows"]
+        if row["attack_scenario"] == "leaf" and row["baseline"] == "ma_ft"
+    ]
+    topo_group = {}
+    for topology in sorted({row["topology_preset"] for row in leaf_rows}):
+        items = [row for row in leaf_rows if row["topology_preset"] == topology]
+        topo_group[topology] = {
+            "quarantine": sum(item["quarantine_strength"] for item in items) / len(items),
+            "f_delta": sum(item["F_delta_vs_clean"] for item in items) / len(items),
+        }
+
+    clean_rows = _load_batch_rows(ablation_clean_dir)
+    stress_rows = _load_batch_rows(ablation_stress_dir)
+    clean_map = {}
+    for row in clean_rows:
+        entry = row["entry"]
+        clean_map[(entry["benchmark_family"], entry["model_alias"], entry["enable_reasoning"], entry["seed"])] = row["summary"]
+    ablation_group: dict[tuple[str, bool], list[float]] = defaultdict(list)
+    for row in stress_rows:
+        entry = row["entry"]
+        if entry["topology_preset"] != "star":
+            continue
+        ablation_group[(entry["model_alias"], bool(entry["enable_reasoning"]))].append(
+            row["summary"]["outcomes"]["infection_spread_rate"] or 0.0
+        )
+
+    frontier_maes = {
+        "Train": predictor_report["train_mae"],
+        "GPT-5.4": _load_json(Path("outputs/v1-0-0-frontier-gpt54-stress/frontier_prediction_comparison.json"))["frontier_mae"],
+        "GPT-5.1": _load_json(Path("outputs/v0-5-0-frontier-predict-stress/frontier_prediction_comparison.json"))["frontier_mae"],
+        "Gemini 3.1 Pro": _load_json(Path("outputs/v1-0-0-frontier-gemini31pro-stress/frontier_prediction_comparison.json"))["frontier_mae"],
+    }
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5.2))
+    plt.style.use("seaborn-v0_8-whitegrid")
+
+    topo_labels = [_topology_display_name(name) for name in topo_group]
+    topo_values = [topo_group[name]["quarantine"] for name in topo_group]
+    bars = axes[0].bar(range(len(topo_labels)), topo_values, color=["#246A73", "#4D908E", "#C56B46", "#9C6644"][: len(topo_labels)])
+    _annotate_vertical_bars(axes[0], bars, fmt="{:.3f}", dy=0.01)
+    axes[0].set_xticks(range(len(topo_labels)))
+    axes[0].set_xticklabels(topo_labels, rotation=12, ha="right")
+    axes[0].set_ylim(0, 1.08)
+    axes[0].set_title("Topology Dominates")
+    axes[0].set_ylabel("Leaf-Attack Quarantine Strength")
+
+    models = ["gemini31_flash_lite_preview", "qwen35_plus_0215"]
+    x = list(range(len(models)))
+    off_values = [sum(ablation_group[(model, False)]) / len(ablation_group[(model, False)]) for model in models]
+    on_values = [sum(ablation_group[(model, True)]) / len(ablation_group[(model, True)]) for model in models]
+    bars_off = axes[1].bar([idx - 0.18 for idx in x], off_values, width=0.35, color="#A7C4BC", label="Off")
+    bars_on = axes[1].bar([idx + 0.18 for idx in x], on_values, width=0.35, color="#C56B46", label="On")
+    _annotate_vertical_bars(axes[1], bars_off, fmt="{:.3f}", dy=0.01)
+    _annotate_vertical_bars(axes[1], bars_on, fmt="{:.3f}", dy=0.01)
+    axes[1].set_xticks(x)
+    axes[1].set_xticklabels([_short_model_name(model) for model in models])
+    axes[1].set_ylim(0, 0.3)
+    axes[1].set_title("Reasoning Doesn't Rescue Star")
+    axes[1].set_ylabel("Infection Spread Rate")
+    axes[1].legend(loc="upper left", title="Reasoning")
+
+    mae_labels = list(frontier_maes.keys())
+    mae_values = list(frontier_maes.values())
+    bars = axes[2].bar(range(len(mae_labels)), mae_values, color=["#246A73", "#4D908E", "#577590", "#C56B46"])
+    _annotate_vertical_bars(axes[2], bars, fmt="{:.3f}", dy=0.01)
+    axes[2].set_xticks(range(len(mae_labels)))
+    axes[2].set_xticklabels(mae_labels, rotation=12, ha="right")
+    axes[2].set_title("Predictor Transfer Gap")
+    axes[2].set_ylabel("MAE")
+
+    fig.suptitle("LLM Coordination Harness v1.0 RC: Topology > Tricks, Prediction < Universal")
+    fig.text(
+        0.01,
+        0.005,
+        "Left: topology ranking under leaf attack. Middle: reasoning ablation on Star. Right: train vs frontier OOD predictor error.",
+        fontsize=9,
+    )
+    _save_figure(fig, output_dir, "release_hero_v1")
+
+
+def _build_release_gif(output_dir: Path) -> None:
+    frame_paths = [
+        output_dir / "release_hero_v1.png",
+        output_dir / "v0_4_reasoning_star_ablation.png",
+        output_dir / "v1_frontier_transfer_gap.png",
+        output_dir / "attack_leaf_topology_bar.png",
+    ]
+    existing = [path for path in frame_paths if path.exists()]
+    if len(existing) < 2:
+        return
+    frames = [Image.open(path).convert("P", palette=Image.ADAPTIVE) for path in existing]
+    gif_path = output_dir / "release_hero_v1.gif"
+    frames[0].save(
+        gif_path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=1500,
+        loop=0,
+        optimize=False,
+    )
+
+
 def generate_plots(
     clean_experiment_dir: str | Path = "outputs/p0a-calibrated-full-live",
     output_dir: str | Path = "docs/figures",
@@ -517,6 +745,10 @@ def generate_plots(
         _plot_attack_f_tradeoff(stress_path, clean_path, output_path)
         _plot_leaf_topology_bar(stress_path, clean_path, output_path)
         _plot_balanced_tree_leaf_vs_manager(stress_path, clean_path, output_path)
+    _plot_reasoning_star_ablation(output_path)
+    _plot_frontier_transfer_gap(output_path)
+    _plot_release_hero(output_path)
+    _build_release_gif(output_path)
     return output_path
 
 

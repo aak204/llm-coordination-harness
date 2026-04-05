@@ -78,6 +78,7 @@ class BaselineExecutor(ABC):
             task=task,
             agent_id=agent_id,
             visible_messages=visible_messages,
+            enable_reasoning=context.trial.enable_reasoning,
             seed=context.trial.seed,
         )
         ledger.consume(

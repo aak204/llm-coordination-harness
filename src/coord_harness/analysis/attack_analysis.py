@@ -9,12 +9,13 @@ from typing import Any
 from coord_harness.logging.schema import AttackAnalysisSection, TrialSummary
 
 
-def _comparison_key(summary: TrialSummary) -> tuple[str, str, int, str, str, int]:
+def _comparison_key(summary: TrialSummary) -> tuple[str, str, int, str, bool, str, int]:
     return (
         summary.benchmark.family,
         summary.topology.preset,
         summary.budget.message_token_budget,
         summary.model.alias,
+        summary.run.enable_reasoning,
         summary.run.baseline,
         summary.run.seed,
     )
@@ -118,6 +119,7 @@ def write_attack_analysis(
             infection_spread_rate=summary.outcomes.infection_spread_rate,
             attack_success_rate=summary.outcomes.attack_success_rate,
             quarantine_strength=quarantine_strength,
+            enable_reasoning=summary.run.enable_reasoning,
             attack_scenario=summary.run.attack_scenario,
             attack_injection_depth=summary.run.attack_injection_depth,
             notes=notes,
@@ -131,6 +133,7 @@ def write_attack_analysis(
                 "topology_preset": summary.topology.preset,
                 "message_token_budget": summary.budget.message_token_budget,
                 "model_alias": summary.model.alias,
+                "enable_reasoning": summary.run.enable_reasoning,
                 "baseline": summary.run.baseline,
                 "seed": summary.run.seed,
                 "clean_F": clean_f,

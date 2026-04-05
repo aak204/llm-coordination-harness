@@ -9,10 +9,12 @@ description = "Minimal reproducible research harness for multi-agent coordinatio
 readme = "docs/RUNBOOK.md"
 requires-python = ">=3.12"
 dependencies = [
+  "catboost>=1.2,<2",
   "httpx>=0.28,<0.29",
   "numpy>=1.26,<3",
   "pydantic>=2.11,<3",
   "PyYAML>=6.0,<7",
+  "scikit-learn>=1.5,<2",
 ]
 
 [project.optional-dependencies]

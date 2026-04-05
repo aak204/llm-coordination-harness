@@ -1,0 +1,57 @@
+run:
+  experiment_id: v1-0-0-frontier-gemini31pro-stress
+  framework_id: coord_harness_v1
+  stage: stress
+  mode: research_strict
+  description: Frontier stress hold-out for Gemini 3.1 Pro Preview on Star and Linear Chain.
+  output_root: outputs
+  agent_count: 9
+  total_billed_token_budget: 25000
+  max_concurrency: 4
+  capture_model_catalog_snapshot: true
+  enable_reasoning: true
+  attack:
+    enabled: true
+    injection_depth: leaf
+    payload_type: hard_hallucination
+    target_answer_policy: first_wrong_option
+    compromise_confidence: 0.99
+    propagate_instruction: true
+    only_baselines: [ma_ft]
+    clean_reference_experiment_dir: outputs/v1-0-0-frontier-gemini31pro-clean
+
+benchmarks:
+  - family: craft_mini
+    stage: clean
+    split: v100_frontier_extra
+    task_limit: 4
+  - family: agentsnet_mini
+    stage: clean
+    split: v100_frontier_extra
+    task_limit: 4
+
+model_panel:
+  - alias: gemini31_pro_preview
+    provider: openrouter
+    model_id: google/gemini-3.1-pro-preview
+    panel_tier: confirmatory
+    temperature: 0.0
+    top_p: 1.0
+    max_completion_tokens: 192
+    allow_auto_routing: false
+    reasoning:
+      enabled: true
+      effort: low
+      exclude: false
+    routing:
+      only: [google-ai-studio]
+      allow_fallbacks: false
+
+sweep:
+  benchmark_families: [craft_mini, agentsnet_mini]
+  topology_presets: [star, linear_chain]
+  message_token_budgets: [96]
+  model_aliases: [gemini31_pro_preview]
+  model_tiers: []
+  baselines: [ma_ft]
+  seeds: [7]
